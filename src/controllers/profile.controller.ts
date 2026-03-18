@@ -1,4 +1,4 @@
-import type{ Response } from "express";
+import type { Response } from "express";
 import Profile from "../models/Profile.js";
 import User from "../models/User.js";
 import { type AuthRequest } from "../middlewares/protect.js";
@@ -12,23 +12,41 @@ export const createProfile = async (
   try {
     const userId = req.userId;
 
+    // ✅ create profile
     const profile = await Profile.create({
       user: userId,
       ...req.body
     });
 
+    // ✅ update user
     await User.findByIdAndUpdate(userId, {
       profileCompleted: true
     });
 
-    res.status(201).json(profile);
+    // ✅ get updated user
+    const updatedUser = await User.findById(userId).lean();
 
-  } catch {
-    res.status(500).json({
+    if (!updatedUser) {
+      return res.status(404).json({
+        message: "User not found"
+      });
+    }
+
+    // 🔥 FINAL RESPONSE (merged object)
+    return res.status(201).json({
+      ...updatedUser,
+      profilePhoto: profile.profilePhoto || ""
+    });
+
+  } catch (error) {
+    console.error("CREATE PROFILE ERROR:", error);
+
+    return res.status(500).json({
       message: "Profile creation failed"
     });
   }
 };
+
 
 /* ================= GET PROFILE ================= */
 
@@ -47,12 +65,25 @@ export const getMyProfile = async (
       user: req.userId
     });
 
-    res.json(profile);
+    if (!profile) {
+      return res.status(404).json({
+        message: "Profile not found"
+      });
+    }
 
-  } catch {
-    res.status(500).json({
+    const user = await User.findById(req.userId).lean();
+
+    // ✅ return merged data here also (important for consistency)
+    return res.json({
+      ...user,
+      profilePhoto: profile.profilePhoto || ""
+    });
+
+  } catch (error) {
+    console.error("GET PROFILE ERROR:", error);
+
+    return res.status(500).json({
       message: "Failed to fetch profile"
     });
   }
 };
-
