@@ -2,6 +2,8 @@ import type { Response } from "express";
 import Profile from "../models/Profile.js";
 import User from "../models/User.js";
 import { type AuthRequest } from "../middlewares/protect.js";
+import cloudinary from "../config/cloudinary.js";
+
 
 /* ================= CREATE PROFILE ================= */
 
@@ -85,5 +87,24 @@ export const getMyProfile = async (
     return res.status(500).json({
       message: "Failed to fetch profile"
     });
+  }
+};
+
+
+export const uploadPhoto = async (req:AuthRequest, res:Response) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ message: "No file uploaded" });
+    }
+
+    const result = await cloudinary.uploader.upload(req.file.path);
+
+    res.json({
+      imageUrl: result.secure_url, // ✅ ALWAYS correct
+    });
+
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Upload failed" });
   }
 };
