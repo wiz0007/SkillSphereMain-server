@@ -3,6 +3,8 @@ import Profile from "../models/Profile.js";
 import User from "../models/User.js";
 import { type AuthRequest } from "../middlewares/protect.js";
 import cloudinary from "../config/cloudinary.js";
+import upload from "../middlewares/upload.js";
+
 
 
 /* ================= CREATE PROFILE ================= */

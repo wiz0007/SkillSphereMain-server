@@ -16,6 +16,7 @@ router.get("/me", protect, getMyProfile);
 
 router.post(
   "/upload-photo",
+  upload.single("profilePhoto"),
   uploadPhoto
 );
 
