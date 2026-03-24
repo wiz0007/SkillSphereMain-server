@@ -16,7 +16,6 @@ router.get("/me", protect, getMyProfile);
 
 router.post(
   "/upload-photo",
-  protect,
   uploadPhoto
 );
 
