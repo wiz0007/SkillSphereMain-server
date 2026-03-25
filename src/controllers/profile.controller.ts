@@ -93,20 +93,25 @@ export const getMyProfile = async (
 };
 
 
-export const uploadPhoto = async (req:AuthRequest, res:Response) => {
-  try {
-    if (!req.file) {
-      return res.status(400).json({ message: "No file uploaded" });
+export const uploadPhoto = async (req: AuthRequest, res: Response) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({
+          message: "No file uploaded",
+        });
+      }
+
+      // 🔥 Upload using file buffer (SAFE for Render)
+      const result = await cloudinary.uploader.upload(req.file.path);
+
+      res.json({
+        imageUrl: result.secure_url,
+      });
+
+    } catch (error) {
+      console.error("UPLOAD ERROR:", error); // 👈 THIS will reveal truth
+      res.status(500).json({
+        message: "Upload failed",
+      });
     }
-
-    const result = await cloudinary.uploader.upload(req.file.path);
-
-    res.json({
-      imageUrl: result.secure_url, // ✅ ALWAYS correct
-    });
-
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: "Upload failed" });
   }
-};
