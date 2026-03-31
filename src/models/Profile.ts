@@ -3,8 +3,6 @@ import mongoose, { Schema, Document } from "mongoose";
 export interface IProfile extends Document {
   user: mongoose.Types.ObjectId;
 
-  role: "student" | "teacher";
-
   fullName: string;
   bio: string;
 
@@ -20,8 +18,13 @@ export interface IProfile extends Document {
   dob?: string;
   gender?: string;
 
-  studentDetails?: any;
-  teacherDetails?: any;
+  isTutor: boolean;
+
+  tutorProfile?: {
+    category: string;
+    experience: number;
+    hourlyRate: number;
+  };
 }
 
 const ProfileSchema = new Schema<IProfile>(
@@ -30,13 +33,7 @@ const ProfileSchema = new Schema<IProfile>(
       type: Schema.Types.ObjectId,
       ref: "User",
       required: true,
-      unique: true
-    },
-
-    role: {
-      type: String,
-      enum: ["student", "teacher"],
-      required: true
+      unique: true,
     },
 
     fullName: { type: String, required: true },
@@ -54,10 +51,20 @@ const ProfileSchema = new Schema<IProfile>(
     dob: String,
     gender: String,
 
-    studentDetails: Schema.Types.Mixed,
-    teacherDetails: Schema.Types.Mixed
+    // ✅ NEW
+    isTutor: {
+      type: Boolean,
+      default: false,
+    },
+
+    tutorProfile: {
+      category: String,
+      experience: Number,
+      hourlyRate: Number,
+    },
   },
   { timestamps: true }
 );
 
 export default mongoose.model<IProfile>("Profile", ProfileSchema);
+

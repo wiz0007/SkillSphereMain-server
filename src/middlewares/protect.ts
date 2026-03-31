@@ -2,7 +2,7 @@ import type { Request, Response, NextFunction } from "express";
 import jwt, { type JwtPayload } from "jsonwebtoken";
 
 export interface AuthRequest extends Request {
-  userId?: string;
+  userId?: string; // ✅ KEEP OPTIONAL
 }
 
 export const protect = (
@@ -32,7 +32,7 @@ export const protect = (
       process.env.JWT_SECRET as string
     ) as JwtPayload;
 
-    req.userId = decoded.id as string;
+    req.userId = decoded.id as string; // ✅ ALWAYS SET HERE
 
     next();
   } catch (error) {
