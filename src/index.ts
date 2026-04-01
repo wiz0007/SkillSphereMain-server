@@ -11,6 +11,10 @@ import { connectDB } from "./config/db.js";
 
 import authRoutes from "./routes/authRoutes.js";
 import profileRoutes from "./routes/profile.routes.js";
+import sessionRoutes from "./routes/session.routes.js";
+import activityRoutes from "./routes/activity.routes.js";
+
+
 
 connectDB();
 
@@ -26,6 +30,9 @@ console.log("ENV TEST:", process.env.CLOUD_NAME);
 
 app.use("/api/auth", authRoutes);
 app.use("/api/profile", profileRoutes);
+
+app.use("/api/sessions", sessionRoutes);
+app.use("/api/activity", activityRoutes);
 
 const PORT = process.env.PORT || 5000;
 
