@@ -6,8 +6,8 @@ import { logActivity } from "../utils/activityLogger.js";
 /* ================= CREATE SESSION ================= */
 export const createSession = async (req: any, res: Response) => {
   try {
-    if (!req.user || !req.user._id) {
-      return res.status(401).json({ message: "Unauthorized: No user" });
+    if (!req.userId) {
+      return res.status(401).json({ message: "Unauthorized" });
     }
 
     const { tutorId, title, date, duration } = req.body;
@@ -27,7 +27,7 @@ export const createSession = async (req: any, res: Response) => {
       (duration / 60);
 
     const session = await Session.create({
-      student: req.user._id,
+      student: req.userId,
       tutor: tutorId,
       title,
       date,
@@ -35,17 +35,13 @@ export const createSession = async (req: any, res: Response) => {
       price,
     });
 
-    // 🔥 Activity log
+    // 🔥 Activity
     await logActivity({
-      user: req.user._id,
+      user: req.userId,
       type: "SESSION",
       action: "BOOKED",
       entityId: session._id,
-      metadata: {
-        title,
-        tutorId,
-        date,
-      },
+      metadata: { title, tutorId, date },
     });
 
     res.status(201).json(session);
@@ -58,12 +54,12 @@ export const createSession = async (req: any, res: Response) => {
 /* ================= GET MY SESSIONS ================= */
 export const getMySessions = async (req: any, res: Response) => {
   try {
-    if (!req.user || !req.user._id) {
-      return res.status(401).json({ message: "Unauthorized: No user" });
+    if (!req.userId) {
+      return res.status(401).json({ message: "Unauthorized" });
     }
 
     const sessions = await Session.find({
-      $or: [{ student: req.user._id }, { tutor: req.user._id }],
+      $or: [{ student: req.userId }, { tutor: req.userId }],
     })
       .populate("student", "name email")
       .populate("tutor", "name email")
@@ -79,8 +75,8 @@ export const getMySessions = async (req: any, res: Response) => {
 /* ================= UPDATE SESSION STATUS ================= */
 export const updateSessionStatus = async (req: any, res: Response) => {
   try {
-    if (!req.user || !req.user._id) {
-      return res.status(401).json({ message: "Unauthorized: No user" });
+    if (!req.userId) {
+      return res.status(401).json({ message: "Unauthorized" });
     }
 
     const { status } = req.body;
@@ -97,8 +93,8 @@ export const updateSessionStatus = async (req: any, res: Response) => {
       return res.status(404).json({ message: "Session not found" });
     }
 
-    // 🔒 Only tutor can update status
-    if (session.tutor.toString() !== req.user._id.toString()) {
+    // 🔒 Only tutor can update
+    if (session.tutor.toString() !== req.userId) {
       return res.status(403).json({ message: "Not authorized" });
     }
 
@@ -107,7 +103,7 @@ export const updateSessionStatus = async (req: any, res: Response) => {
 
     // 🔥 Activity for tutor
     await logActivity({
-      user: req.user._id,
+      user: req.userId,
       type: "SESSION",
       action: status.toUpperCase(),
       entityId: session._id,
