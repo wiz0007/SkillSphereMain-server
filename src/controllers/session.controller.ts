@@ -1,11 +1,15 @@
-import type { Request, Response } from "express";
+import type { Response } from "express";
 import Session from "../models/Session.js";
 import Profile from "../models/Profile.js";
 import { logActivity } from "../utils/activityLogger.js";
 
-// CREATE SESSION (Student books tutor)
+/* ================= CREATE SESSION ================= */
 export const createSession = async (req: any, res: Response) => {
   try {
+    if (!req.user || !req.user._id) {
+      return res.status(401).json({ message: "Unauthorized: No user" });
+    }
+
     const { tutorId, title, date, duration } = req.body;
 
     if (!tutorId || !title || !date || !duration) {
@@ -31,7 +35,7 @@ export const createSession = async (req: any, res: Response) => {
       price,
     });
 
-    // 🔥 Structured Activity Logging
+    // 🔥 Activity log
     await logActivity({
       user: req.user._id,
       type: "SESSION",
@@ -46,12 +50,18 @@ export const createSession = async (req: any, res: Response) => {
 
     res.status(201).json(session);
   } catch (error) {
+    console.error("CREATE SESSION ERROR:", error);
     res.status(500).json({ message: "Error creating session" });
   }
 };
 
+/* ================= GET MY SESSIONS ================= */
 export const getMySessions = async (req: any, res: Response) => {
   try {
+    if (!req.user || !req.user._id) {
+      return res.status(401).json({ message: "Unauthorized: No user" });
+    }
+
     const sessions = await Session.find({
       $or: [{ student: req.user._id }, { tutor: req.user._id }],
     })
@@ -61,12 +71,18 @@ export const getMySessions = async (req: any, res: Response) => {
 
     res.json(sessions);
   } catch (error) {
+    console.error("GET SESSIONS ERROR:", error);
     res.status(500).json({ message: "Error fetching sessions" });
   }
 };
 
+/* ================= UPDATE SESSION STATUS ================= */
 export const updateSessionStatus = async (req: any, res: Response) => {
   try {
+    if (!req.user || !req.user._id) {
+      return res.status(401).json({ message: "Unauthorized: No user" });
+    }
+
     const { status } = req.body;
 
     const allowedStatuses = ["accepted", "completed", "cancelled"];
@@ -81,7 +97,7 @@ export const updateSessionStatus = async (req: any, res: Response) => {
       return res.status(404).json({ message: "Session not found" });
     }
 
-    // 🔒 Only tutor can accept/reject
+    // 🔒 Only tutor can update status
     if (session.tutor.toString() !== req.user._id.toString()) {
       return res.status(403).json({ message: "Not authorized" });
     }
@@ -97,7 +113,7 @@ export const updateSessionStatus = async (req: any, res: Response) => {
       entityId: session._id,
     });
 
-    // 🔥 Activity for student (IMPORTANT UX)
+    // 🔥 Activity for student
     await logActivity({
       user: session.student,
       type: "SESSION",
@@ -107,6 +123,7 @@ export const updateSessionStatus = async (req: any, res: Response) => {
 
     res.json(session);
   } catch (error) {
+    console.error("UPDATE SESSION ERROR:", error);
     res.status(500).json({ message: "Error updating session" });
   }
 };
