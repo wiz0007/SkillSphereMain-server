@@ -2,6 +2,7 @@ import type { Request, Response } from "express";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import User from "../models/User.js";
+import Profile from "../models/Profile.js";
 
 const generateToken = (id: string) => {
   return jwt.sign({ id }, process.env.JWT_SECRET as string, {
@@ -64,7 +65,7 @@ export const login = async (req: Request, res: Response) => {
 
     if (!user) {
       return res.status(400).json({
-        message: "Invalid credentials"
+        message: "Invalid credentials",
       });
     }
 
@@ -72,17 +73,24 @@ export const login = async (req: Request, res: Response) => {
 
     if (!isMatch) {
       return res.status(400).json({
-        message: "Invalid credentials"
+        message: "Invalid credentials",
       });
     }
 
+    // 🔥 GET PROFILE
+    const profile = await Profile.findOne({ user: user._id });
+
     res.json({
       token: generateToken(user._id.toString()),
-      user
+      user: {
+        ...user.toObject(),
+        isTutor: profile?.isTutor || false, // ✅ FIX
+      },
     });
-  } catch {
+
+  } catch (error) {
     res.status(500).json({
-      message: "Login failed"
+      message: "Login failed",
     });
   }
 };
