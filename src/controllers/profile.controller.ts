@@ -110,52 +110,97 @@ export const becomeTutor = async (
   res: Response
 ) => {
   try {
-    // ✅ AUTH CHECK
+    /* ================= AUTH ================= */
     if (!req.userId) {
       return res.status(401).json({
-        message: "Unauthorized"
+        message: "Unauthorized",
       });
     }
 
     const userId = new mongoose.Types.ObjectId(req.userId);
 
-    const { category, experience, hourlyRate } = req.body;
+    /* ================= BODY ================= */
+    const {
+      headline,
+      skills,
+      categories,
+      experience,
+      hourlyRate,
+      languages,
+    } = req.body;
 
-    const profile = await Profile.findOneAndUpdate(
-      { user: userId },
-      {
-        isTutor: true,
-        tutorProfile: {
-          category,
-          experience,
-          hourlyRate
-        }
-      },
-      { new: true }
-    ).lean();
-
-    if (!profile) {
-      return res.status(404).json({
-        message: "Profile not found"
+    /* ================= VALIDATION ================= */
+    if (!headline) {
+      return res.status(400).json({
+        message: "Headline is required",
       });
     }
 
-    const user = await User.findById(userId).lean();
+    if (!skills || !Array.isArray(skills) || skills.length === 0) {
+      return res.status(400).json({
+        message: "Skills are required",
+      });
+    }
 
-    return res.json({
-      ...user,
-      ...profile
+    if (!categories || !Array.isArray(categories)) {
+      return res.status(400).json({
+        message: "Categories are required",
+      });
+    }
+
+    if (hourlyRate == null || hourlyRate < 0) {
+      return res.status(400).json({
+        message: "Valid hourly rate required",
+      });
+    }
+
+    /* ================= FETCH PROFILE ================= */
+    const profile = await Profile.findOne({ user: userId });
+
+    if (!profile) {
+      return res.status(404).json({
+        message: "Profile not found",
+      });
+    }
+
+    if (profile.isTutor) {
+      return res.status(400).json({
+        message: "User is already a tutor",
+      });
+    }
+
+    /* ================= UPDATE ================= */
+    profile.isTutor = true;
+
+    profile.tutorProfile = {
+      headline,
+      skills,
+      categories,
+      experience,
+      hourlyRate,
+      languages,
+    };
+
+    await profile.save();
+
+    /* ================= RESPONSE ================= */
+    return res.status(200).json({
+      message: "Tutor profile created successfully",
+      data: {
+        userId,
+        isTutor: profile.isTutor,
+        tutorProfile: profile.tutorProfile,
+      },
     });
 
   } catch (error) {
     console.error("BECOME TUTOR ERROR:", error);
 
     return res.status(500).json({
-      message: "Failed to become tutor"
+      message: "Failed to become tutor",
     });
   }
 };
-
 /* ================= UPLOAD PHOTO ================= */
 
 export const uploadPhoto = async (
@@ -183,3 +228,4 @@ export const uploadPhoto = async (
     });
   }
 };
+
