@@ -13,6 +13,7 @@ import authRoutes from "./routes/authRoutes.js";
 import profileRoutes from "./routes/profile.routes.js";
 import sessionRoutes from "./routes/session.routes.js";
 import activityRoutes from "./routes/activity.routes.js";
+import courseRoutes from "./routes/course.routes.js";
 
 
 
@@ -33,6 +34,8 @@ app.use("/api/profile", profileRoutes);
 
 app.use("/api/sessions", sessionRoutes);
 app.use("/api/activity", activityRoutes);
+
+app.use("/api/courses", courseRoutes);
 
 const PORT = process.env.PORT || 5000;
 
