@@ -12,7 +12,7 @@ export interface ICourse extends Document {
   price: number;
   duration: string;
 
-  level: "beginner" | "intermediate" | "advanced";
+  level: "Beginner" | "Intermediate" | "Advanced";
 
   isPublished: boolean;
 }
@@ -46,8 +46,8 @@ const CourseSchema = new Schema<ICourse>(
 
     level: {
       type: String,
-      enum: ["beginner", "intermediate", "advanced"],
-      default: "beginner",
+      enum: ["Beginner", "Intermediate", "Advanced"],
+      default: "Beginner",
     },
 
     isPublished: {
