@@ -2,6 +2,8 @@ import Course from "../models/Course.js";
 
 // CREATE
 export const createCourse = async (req: any, res: any) => {
+    console.log("BODY:", req.body);
+console.log("USER:", req.user);
   try {
     const course = await Course.create({
       ...req.body,
