@@ -191,26 +191,19 @@ export const updateProfile = async (
   res: Response
 ) => {
   try {
-    /* ================= AUTH ================= */
     if (!req.userId) {
-      return res.status(401).json({
-        message: "Unauthorized",
-      });
+      return res.status(401).json({ message: "Unauthorized" });
     }
 
     const userId = new mongoose.Types.ObjectId(req.userId);
 
-    /* ================= FIND PROFILE ================= */
     const profile = await Profile.findOne({ user: userId });
 
     if (!profile) {
-      return res.status(404).json({
-        message: "Profile not found",
-      });
+      return res.status(404).json({ message: "Profile not found" });
     }
 
-    /* ================= SAFE UPDATES ================= */
-
+    /* ===== SAFE FIELDS ===== */
     const allowedFields: (keyof IProfile)[] = [
       "fullName",
       "bio",
@@ -233,22 +226,26 @@ export const updateProfile = async (
       }
     });
 
-    /* ================= SAVE ================= */
+    /* ===== TUTOR PROFILE UPDATE ===== */
+    if (req.body.tutorProfile) {
+      const tp = req.body.tutorProfile;
+
+      profile.tutorProfile = {
+        ...profile.tutorProfile,
+        ...tp,
+      };
+    }
+
     await profile.save();
 
-    /* ================= MERGE USER ================= */
     const user = await User.findById(userId).lean();
 
     return res.json({
       ...user,
       ...profile.toObject(),
     });
-
   } catch (error) {
     console.error("UPDATE PROFILE ERROR:", error);
-
-    return res.status(500).json({
-      message: "Failed to update profile",
-    });
+    return res.status(500).json({ message: "Failed to update profile" });
   }
-}
+};
