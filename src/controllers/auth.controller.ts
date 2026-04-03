@@ -84,7 +84,8 @@ export const login = async (req: Request, res: Response) => {
       token: generateToken(user._id.toString()),
       user: {
         ...user.toObject(),
-        isTutor: profile?.isTutor || false, // ✅ FIX
+        isTutor: profile?.isTutor || false,
+        profilePhoto: profile?.profilePhoto || "", // ✅ ADD THIS
       },
     });
 
