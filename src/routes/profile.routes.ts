@@ -3,7 +3,8 @@ import {
   createProfile,
   getMyProfile,
   uploadPhoto,
-  becomeTutor
+  becomeTutor,
+  updateProfile
 } from "../controllers/profile.controller.js";
 
 import { protect } from "../middlewares/protect.js";
@@ -22,5 +23,8 @@ router.post(
 );
 
 router.post("/become-tutor", protect, becomeTutor);
+
+router.put("/", protect, updateProfile);
+
 
 export default router;
