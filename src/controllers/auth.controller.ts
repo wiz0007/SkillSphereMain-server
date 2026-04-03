@@ -15,7 +15,7 @@ const generateToken = (id: string) => {
 export const register = async (req: Request, res: Response) => {
   try {
 
-    const { name, email, password } = req.body;
+    const { username, email, password } = req.body;
 
     if (!email || !password) {
       return res.status(400).json({
@@ -34,7 +34,7 @@ export const register = async (req: Request, res: Response) => {
     const hashedPassword = await bcrypt.hash(password, 10);
 
     const user = await User.create({
-      name,
+      username,
       email,
       password: hashedPassword
     });
@@ -79,6 +79,7 @@ export const login = async (req: Request, res: Response) => {
 
     // 🔥 GET PROFILE
     const profile = await Profile.findOne({ user: user._id });
+
 
     res.json({
       token: generateToken(user._id.toString()),
