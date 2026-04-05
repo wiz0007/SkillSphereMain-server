@@ -1,5 +1,12 @@
 import mongoose, { Schema, Document } from "mongoose";
 
+/* ⭐ RATING SUBDOC */
+export interface IRating {
+  user: mongoose.Types.ObjectId;
+  value: number;
+}
+
+/* COURSE */
 export interface ICourse extends Document {
   tutor: mongoose.Types.ObjectId;
 
@@ -15,7 +22,29 @@ export interface ICourse extends Document {
   level: "Beginner" | "Intermediate" | "Advanced";
 
   isPublished: boolean;
+
+  /* ⭐ NEW */
+  ratings: IRating[];
+  averageRating: number;
+  totalRatings: number;
 }
+
+const RatingSchema = new Schema<IRating>(
+  {
+    user: {
+      type: Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
+    },
+    value: {
+      type: Number,
+      required: true,
+      min: 1,
+      max: 5,
+    },
+  },
+  { _id: false }
+);
 
 const CourseSchema = new Schema<ICourse>(
   {
@@ -28,36 +57,19 @@ const CourseSchema = new Schema<ICourse>(
     title: {
       type: String,
       required: true,
-      trim: true,
     },
 
-    description: {
-      type: String,
-      trim: true,
-    },
+    description: String,
 
-    category: {
-      type: String,
-      trim: true,
-    },
-
-    skills: [
-      {
-        type: String,
-        trim: true,
-      },
-    ],
+    category: String,
+    skills: [String],
 
     price: {
       type: Number,
       default: 0,
-      min: 0,
     },
 
-    duration: {
-      type: String,
-      trim: true,
-    },
+    duration: String,
 
     level: {
       type: String,
@@ -68,6 +80,19 @@ const CourseSchema = new Schema<ICourse>(
     isPublished: {
       type: Boolean,
       default: true,
+    },
+
+    /* ⭐ NEW FIELDS */
+    ratings: [RatingSchema],
+
+    averageRating: {
+      type: Number,
+      default: 0,
+    },
+
+    totalRatings: {
+      type: Number,
+      default: 0,
     },
   },
   { timestamps: true }
