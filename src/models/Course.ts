@@ -21,28 +21,43 @@ const CourseSchema = new Schema<ICourse>(
   {
     tutor: {
       type: Schema.Types.ObjectId,
-      ref: "User", // or Profile (explained below)
+      ref: "User",
       required: true,
     },
 
     title: {
       type: String,
       required: true,
+      trim: true,
     },
 
     description: {
       type: String,
+      trim: true,
     },
 
-    category: String,
-    skills: [String],
+    category: {
+      type: String,
+      trim: true,
+    },
+
+    skills: [
+      {
+        type: String,
+        trim: true,
+      },
+    ],
 
     price: {
       type: Number,
       default: 0,
+      min: 0,
     },
 
-    duration: String,
+    duration: {
+      type: String,
+      trim: true,
+    },
 
     level: {
       type: String,

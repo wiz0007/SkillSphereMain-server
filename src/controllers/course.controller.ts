@@ -1,7 +1,31 @@
 import Course from "../models/Course.js";
-import mongoose from "mongoose";
 import type { Response } from "express";
 import type { AuthRequest } from "../middlewares/protect.js";
+
+/* ================= NORMALIZE DATA ================= */
+const normalizeCourseData = (body: any) => {
+  return {
+    title: body.title?.trim(),
+
+    description: body.description?.trim(),
+
+    category: body.category?.trim(),
+
+    skills: Array.isArray(body.skills)
+      ? body.skills.map((s: string) => s.trim())
+      : [],
+
+    price: Number(body.price) || 0,
+
+    duration: body.duration?.trim(),
+
+    // 🔥 Normalize level safely
+    level: body.level
+      ? body.level.charAt(0).toUpperCase() +
+        body.level.slice(1).toLowerCase()
+      : "Beginner",
+  };
+};
 
 /* ================= CREATE ================= */
 export const createCourse = async (
@@ -9,17 +33,16 @@ export const createCourse = async (
   res: Response
 ) => {
   try {
-    console.log("BODY:", req.body);
-    console.log("USER ID:", req.userId);
-
     if (!req.userId) {
       return res.status(401).json({
         message: "Unauthorized",
       });
     }
 
+    const data = normalizeCourseData(req.body);
+
     const course = await Course.create({
-      ...req.body,
+      ...data,
       tutor: req.userId,
     });
 
@@ -39,8 +62,6 @@ export const getMyCourses = async (
   res: Response
 ) => {
   try {
-    console.log("USER ID:", req.userId);
-
     if (!req.userId) {
       return res.status(401).json({
         message: "Unauthorized",
@@ -57,6 +78,38 @@ export const getMyCourses = async (
 
     res.status(500).json({
       message: err.message || "Error fetching courses",
+    });
+  }
+};
+
+/* ================= GET SINGLE COURSE ================= */
+export const getCourseById = async (
+  req: AuthRequest,
+  res: Response
+) => {
+  try {
+    const id = req.params.id;
+
+    if (!id || Array.isArray(id)) {
+      return res.status(400).json({
+        message: "Invalid course ID",
+      });
+    }
+
+    const course = await Course.findById(id);
+
+    if (!course) {
+      return res.status(404).json({
+        message: "Course not found",
+      });
+    }
+
+    res.json(course);
+  } catch (err: any) {
+    console.error("GET COURSE ERROR:", err);
+
+    res.status(500).json({
+      message: err.message || "Error fetching course",
     });
   }
 };
@@ -81,18 +134,20 @@ export const updateCourse = async (
       });
     }
 
+    const data = normalizeCourseData(req.body);
+
     const course = await Course.findOneAndUpdate(
       {
-        _id: id, // ✅ mongoose auto-casts
-        tutor: req.userId, // 🔥 secure update
+        _id: id,
+        tutor: req.userId, // 🔥 security check
       },
-      req.body,
+      data,
       { new: true }
     );
 
     if (!course) {
       return res.status(404).json({
-        message: "Course not found",
+        message: "Course not found or unauthorized",
       });
     }
 
@@ -127,13 +182,13 @@ export const deleteCourse = async (
     }
 
     const course = await Course.findOneAndDelete({
-      _id: id, // ✅ mongoose auto-casts
-      tutor: req.userId, // 🔥 secure delete
+      _id: id,
+      tutor: req.userId, // 🔥 security check
     });
 
     if (!course) {
       return res.status(404).json({
-        message: "Course not found",
+        message: "Course not found or unauthorized",
       });
     }
 
