@@ -191,3 +191,65 @@ export const deleteCourse: RequestHandler = async (req, res) => {
     });
   }
 };
+
+
+/* ⭐ RATE COURSE */
+export const rateCourse: RequestHandler = async (req, res) => {
+  try {
+    const userId = (req as any).userId;
+    const { id } = req.params;
+    const { value } = req.body;
+
+    if (!userId) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+
+    if (!value || value < 1 || value > 5) {
+      return res.status(400).json({ message: "Invalid rating value" });
+    }
+
+    const course = await Course.findById(id);
+
+    if (!course) {
+      return res.status(404).json({ message: "Course not found" });
+    }
+
+    /* 🔥 CHECK EXISTING RATING */
+    const existingRating = course.ratings.find(
+      (r) => r.user.toString() === userId
+    );
+
+    if (existingRating) {
+      existingRating.value = value;
+    } else {
+      course.ratings.push({
+        user: userId,
+        value,
+      });
+    }
+
+    /* 🔥 RE-CALCULATE */
+    const total = course.ratings.length;
+
+    const sum = course.ratings.reduce((acc, r) => acc + r.value, 0);
+
+    const avg = total === 0 ? 0 : sum / total;
+
+    course.averageRating = Number(avg.toFixed(1));
+    course.totalRatings = total;
+
+    await course.save();
+
+    return res.json({
+      message: "Rating submitted",
+      averageRating: course.averageRating,
+      totalRatings: course.totalRatings,
+    });
+  } catch (err: any) {
+    console.error("RATE ERROR:", err);
+
+    return res.status(500).json({
+      message: err.message || "Error rating course",
+    });
+  }
+};
