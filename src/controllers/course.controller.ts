@@ -1,14 +1,12 @@
 import Course from "../models/Course.js";
-import type { Response } from "express";
+import type { RequestHandler } from "express";
 import type { AuthRequest } from "../middlewares/protect.js";
 
 /* ================= NORMALIZE DATA ================= */
 const normalizeCourseData = (body: any) => {
   return {
     title: body.title?.trim(),
-
     description: body.description?.trim(),
-
     category: body.category?.trim(),
 
     skills: Array.isArray(body.skills)
@@ -16,10 +14,8 @@ const normalizeCourseData = (body: any) => {
       : [],
 
     price: Number(body.price) || 0,
-
     duration: body.duration?.trim(),
 
-    // 🔥 Normalize level safely
     level: body.level
       ? body.level.charAt(0).toUpperCase() +
         body.level.slice(1).toLowerCase()
@@ -28,22 +24,19 @@ const normalizeCourseData = (body: any) => {
 };
 
 /* ================= CREATE ================= */
-export const createCourse = async (
-  req: AuthRequest,
-  res: Response
-) => {
+export const createCourse: RequestHandler = async (req, res) => {
   try {
-    if (!req.userId) {
-      return res.status(401).json({
-        message: "Unauthorized",
-      });
+    const userId = (req as AuthRequest).userId;
+
+    if (!userId) {
+      return res.status(401).json({ message: "Unauthorized" });
     }
 
     const data = normalizeCourseData(req.body);
 
     const course = await Course.create({
       ...data,
-      tutor: req.userId,
+      tutor: userId,
     });
 
     res.status(201).json(course);
@@ -56,25 +49,39 @@ export const createCourse = async (
   }
 };
 
-/* ================= GET MY COURSES ================= */
-export const getMyCourses = async (
-  req: AuthRequest,
-  res: Response
-) => {
+/* ================= GET ALL COURSES (PUBLIC) ================= */
+export const getAllCourses: RequestHandler = async (req, res) => {
   try {
-    if (!req.userId) {
-      return res.status(401).json({
-        message: "Unauthorized",
-      });
+    const courses = await Course.find()
+      .populate("tutor", "name") // optional
+      .sort({ createdAt: -1 });
+
+    res.json(courses);
+  } catch (err: any) {
+    console.error("GET ALL COURSES ERROR:", err);
+
+    res.status(500).json({
+      message: err.message || "Error fetching courses",
+    });
+  }
+};
+
+/* ================= GET MY COURSES ================= */
+export const getMyCourses: RequestHandler = async (req, res) => {
+  try {
+    const userId = (req as AuthRequest).userId;
+
+    if (!userId) {
+      return res.status(401).json({ message: "Unauthorized" });
     }
 
     const courses = await Course.find({
-      tutor: req.userId,
+      tutor: userId,
     }).sort({ createdAt: -1 });
 
     res.json(courses);
   } catch (err: any) {
-    console.error("GET COURSES ERROR:", err);
+    console.error("GET MY COURSES ERROR:", err);
 
     res.status(500).json({
       message: err.message || "Error fetching courses",
@@ -83,25 +90,21 @@ export const getMyCourses = async (
 };
 
 /* ================= GET SINGLE COURSE ================= */
-export const getCourseById = async (
-  req: AuthRequest,
-  res: Response
-) => {
+export const getCourseById: RequestHandler = async (req, res) => {
   try {
-    const id = req.params.id;
+    const { id } = req.params;
 
-    if (!id || Array.isArray(id)) {
-      return res.status(400).json({
-        message: "Invalid course ID",
-      });
+    if (!id) {
+      return res.status(400).json({ message: "Invalid course ID" });
     }
 
-    const course = await Course.findById(id);
+    const course = await Course.findById(id).populate(
+      "tutor",
+      "name"
+    );
 
     if (!course) {
-      return res.status(404).json({
-        message: "Course not found",
-      });
+      return res.status(404).json({ message: "Course not found" });
     }
 
     res.json(course);
@@ -115,32 +118,24 @@ export const getCourseById = async (
 };
 
 /* ================= UPDATE ================= */
-export const updateCourse = async (
-  req: AuthRequest,
-  res: Response
-) => {
+export const updateCourse: RequestHandler = async (req, res) => {
   try {
-    if (!req.userId) {
-      return res.status(401).json({
-        message: "Unauthorized",
-      });
+    const userId = (req as AuthRequest).userId;
+
+    if (!userId) {
+      return res.status(401).json({ message: "Unauthorized" });
     }
 
-    const id = req.params.id;
+    const { id } = req.params;
 
-    if (!id || Array.isArray(id)) {
-      return res.status(400).json({
-        message: "Invalid course ID",
-      });
+    if (!id) {
+      return res.status(400).json({ message: "Invalid course ID" });
     }
 
     const data = normalizeCourseData(req.body);
 
     const course = await Course.findOneAndUpdate(
-      {
-        _id: id,
-        tutor: req.userId, // 🔥 security check
-      },
+      { _id: id, tutor: userId }, // 🔒 ownership check
       data,
       { new: true }
     );
@@ -162,28 +157,23 @@ export const updateCourse = async (
 };
 
 /* ================= DELETE ================= */
-export const deleteCourse = async (
-  req: AuthRequest,
-  res: Response
-) => {
+export const deleteCourse: RequestHandler = async (req, res) => {
   try {
-    if (!req.userId) {
-      return res.status(401).json({
-        message: "Unauthorized",
-      });
+    const userId = (req as AuthRequest).userId;
+
+    if (!userId) {
+      return res.status(401).json({ message: "Unauthorized" });
     }
 
-    const id = req.params.id;
+    const { id } = req.params;
 
-    if (!id || Array.isArray(id)) {
-      return res.status(400).json({
-        message: "Invalid course ID",
-      });
+    if (!id) {
+      return res.status(400).json({ message: "Invalid course ID" });
     }
 
     const course = await Course.findOneAndDelete({
       _id: id,
-      tutor: req.userId, // 🔥 security check
+      tutor: userId, // 🔒 ownership check
     });
 
     if (!course) {
@@ -192,9 +182,7 @@ export const deleteCourse = async (
       });
     }
 
-    res.json({
-      message: "Course deleted successfully",
-    });
+    res.json({ message: "Course deleted successfully" });
   } catch (err: any) {
     console.error("DELETE ERROR:", err);
 
