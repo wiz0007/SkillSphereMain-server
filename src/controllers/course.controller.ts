@@ -253,3 +253,48 @@ export const rateCourse: RequestHandler = async (req, res) => {
     });
   }
 };
+
+export const addReview: RequestHandler = async (req, res) => {
+  try {
+    const userId = (req as any).userId;
+    const { id } = req.params;
+    const { rating, comment } = req.body;
+
+    if (!userId) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+
+    if (!rating || !comment) {
+      return res.status(400).json({ message: "All fields required" });
+    }
+
+    const course = await Course.findById(id);
+
+    if (!course) {
+      return res.status(404).json({ message: "Course not found" });
+    }
+
+    /* 🔥 Prevent duplicate review */
+    const existing = course.reviews.find(
+      (r: any) => r.user.toString() === userId
+    );
+
+    if (existing) {
+      existing.rating = rating;
+      existing.comment = comment;
+    } else {
+      course.reviews.push({
+        user: userId,
+        rating,
+        comment,
+      });
+    }
+
+    await course.save();
+
+    return res.json(course.reviews);
+  } catch (err: any) {
+    console.error("REVIEW ERROR:", err);
+    return res.status(500).json({ message: err.message });
+  }
+};
