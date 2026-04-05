@@ -1,12 +1,21 @@
 import mongoose, { Schema, Document } from "mongoose";
 
-/* ⭐ RATING SUBDOC */
+/* ================= RATING ================= */
 export interface IRating {
   user: mongoose.Types.ObjectId;
   value: number;
 }
 
-/* COURSE */
+/* ================= REVIEW ================= */
+export interface IReview {
+  user: mongoose.Types.ObjectId;
+  rating: number;
+  comment: string;
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+
+/* ================= COURSE ================= */
 export interface ICourse extends Document {
   tutor: mongoose.Types.ObjectId;
 
@@ -23,11 +32,16 @@ export interface ICourse extends Document {
 
   isPublished: boolean;
 
-  /* ⭐ NEW */
+  /* ⭐ Ratings */
   ratings: IRating[];
   averageRating: number;
   totalRatings: number;
+
+  /* ✍️ Reviews */
+  reviews: IReview[];
 }
+
+/* ================= SCHEMAS ================= */
 
 const RatingSchema = new Schema<IRating>(
   {
@@ -46,6 +60,32 @@ const RatingSchema = new Schema<IRating>(
   { _id: false }
 );
 
+const ReviewSchema = new Schema<IReview>(
+  {
+    user: {
+      type: Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
+    },
+    rating: {
+      type: Number,
+      required: true,
+      min: 1,
+      max: 5,
+    },
+    comment: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+  },
+  {
+    timestamps: true, // adds createdAt & updatedAt
+  }
+);
+
+/* ================= MAIN COURSE ================= */
+
 const CourseSchema = new Schema<ICourse>(
   {
     tutor: {
@@ -57,9 +97,13 @@ const CourseSchema = new Schema<ICourse>(
     title: {
       type: String,
       required: true,
+      trim: true,
     },
 
-    description: String,
+    description: {
+      type: String,
+      default: "",
+    },
 
     category: String,
     skills: [String],
@@ -82,8 +126,11 @@ const CourseSchema = new Schema<ICourse>(
       default: true,
     },
 
-    /* ⭐ NEW FIELDS */
-    ratings: [RatingSchema],
+    /* ⭐ RATINGS */
+    ratings: {
+      type: [RatingSchema],
+      default: [],
+    },
 
     averageRating: {
       type: Number,
@@ -93,6 +140,12 @@ const CourseSchema = new Schema<ICourse>(
     totalRatings: {
       type: Number,
       default: 0,
+    },
+
+    /* ✍️ REVIEWS */
+    reviews: {
+      type: [ReviewSchema],
+      default: [],
     },
   },
   { timestamps: true }
