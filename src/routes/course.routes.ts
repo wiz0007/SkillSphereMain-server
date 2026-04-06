@@ -7,7 +7,10 @@ import {
   getCourseById,
   getAllCourses,
   rateCourse,
-  addReview
+  addReview,
+  getSavedCourses,
+  saveCourse,
+  unsaveCourse,
 } from "../controllers/course.controller.js";
 
 import { protect } from "../middlewares/protect.js";
@@ -23,5 +26,8 @@ router.put("/:id", protect, updateCourse);
 router.delete("/:id", protect, deleteCourse);
 router.post("/:id/rate", protect, rateCourse);
 router.post("/:id/review", protect, addReview);
+router.get("/saved", protect, getSavedCourses);
+router.post("/:id/save", protect, saveCourse);
+router.delete("/:id/save", protect, unsaveCourse);
 
 export default router;
