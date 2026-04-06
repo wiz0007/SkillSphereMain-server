@@ -301,61 +301,81 @@ export const addReview: RequestHandler = async (req, res) => {
 };
 
 
+/* ================= SAVE COURSE ================= */
 export const saveCourse: RequestHandler = async (req, res) => {
   try {
     const userId = (req as AuthRequest).userId;
-    const courseId = req.params.id;
+    const { id } = req.params;
 
     if (!userId) {
       return res.status(401).json({ message: "Unauthorized" });
     }
 
-    const course = await Course.findById(courseId);
+    const course = await Course.findByIdAndUpdate(
+      id,
+      {
+        $addToSet: {
+          savedBy: new mongoose.Types.ObjectId(userId),
+        },
+      },
+      { new: true }
+    );
 
     if (!course) {
       return res.status(404).json({ message: "Course not found" });
     }
 
-    // already saved
-    if (course.savedBy.some((id) => id.toString() === userId)) {
-      return res.status(200).json({ message: "Already saved" });
-    }
-
-    course.savedBy.push(new mongoose.Types.ObjectId(userId));
-    await course.save();
-
-    res.status(200).json({ message: "Course saved successfully" });
+    res.status(200).json({
+      savedBy: course.savedBy,
+      isSaved: course.savedBy.some(
+        (u) => u.toString() === userId
+      ),
+    });
   } catch (err: any) {
     console.error("SAVE ERROR:", err);
-    res.status(500).json({ message: err.message });
+
+    res.status(500).json({
+      message: err.message || "Error saving course",
+    });
   }
 };
 
+/* ================= UNSAVE COURSE ================= */
 export const unsaveCourse: RequestHandler = async (req, res) => {
   try {
     const userId = (req as AuthRequest).userId;
-    const courseId = req.params.id;
+    const { id } = req.params;
 
     if (!userId) {
       return res.status(401).json({ message: "Unauthorized" });
     }
 
-    const course = await Course.findById(courseId);
+    const course = await Course.findByIdAndUpdate(
+      id,
+      {
+        $pull: {
+          savedBy: new mongoose.Types.ObjectId(userId),
+        },
+      },
+      { new: true }
+    );
 
     if (!course) {
       return res.status(404).json({ message: "Course not found" });
     }
 
-    course.savedBy = course.savedBy.filter(
-      (id) => id.toString() !== userId
-    );
-
-    await course.save();
-
-    res.status(200).json({ message: "Course removed from saved" });
+    res.status(200).json({
+      savedBy: course.savedBy,
+      isSaved: course.savedBy.some(
+        (u) => u.toString() === userId
+      ),
+    });
   } catch (err: any) {
     console.error("UNSAVE ERROR:", err);
-    res.status(500).json({ message: err.message });
+
+    res.status(500).json({
+      message: err.message || "Error unsaving course",
+    });
   }
 };
 
