@@ -1,6 +1,7 @@
 import Course from "../models/Course.js";
 import type { RequestHandler } from "express";
 import type { AuthRequest } from "../middlewares/protect.js";
+import mongoose from "mongoose";
 
 /* ================= NORMALIZE DATA ================= */
 const normalizeCourseData = (body: any) => {
@@ -296,5 +297,83 @@ export const addReview: RequestHandler = async (req, res) => {
   } catch (err: any) {
     console.error("REVIEW ERROR:", err);
     return res.status(500).json({ message: err.message });
+  }
+};
+
+
+export const saveCourse: RequestHandler = async (req, res) => {
+  try {
+    const userId = (req as AuthRequest).userId;
+    const courseId = req.params.id;
+
+    if (!userId) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+
+    const course = await Course.findById(courseId);
+
+    if (!course) {
+      return res.status(404).json({ message: "Course not found" });
+    }
+
+    // already saved
+    if (course.savedBy.some((id) => id.toString() === userId)) {
+      return res.status(200).json({ message: "Already saved" });
+    }
+
+    course.savedBy.push(new mongoose.Types.ObjectId(userId));
+    await course.save();
+
+    res.status(200).json({ message: "Course saved successfully" });
+  } catch (err: any) {
+    console.error("SAVE ERROR:", err);
+    res.status(500).json({ message: err.message });
+  }
+};
+
+export const unsaveCourse: RequestHandler = async (req, res) => {
+  try {
+    const userId = (req as AuthRequest).userId;
+    const courseId = req.params.id;
+
+    if (!userId) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+
+    const course = await Course.findById(courseId);
+
+    if (!course) {
+      return res.status(404).json({ message: "Course not found" });
+    }
+
+    course.savedBy = course.savedBy.filter(
+      (id) => id.toString() !== userId
+    );
+
+    await course.save();
+
+    res.status(200).json({ message: "Course removed from saved" });
+  } catch (err: any) {
+    console.error("UNSAVE ERROR:", err);
+    res.status(500).json({ message: err.message });
+  }
+};
+
+export const getSavedCourses: RequestHandler = async (req, res) => {
+  try {
+    const userId = (req as AuthRequest).userId;
+
+    if (!userId) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+
+    const courses = await Course.find({
+      savedBy: userId,
+    }).sort({ createdAt: -1 });
+
+    res.status(200).json(courses);
+  } catch (err: any) {
+    console.error("GET SAVED ERROR:", err);
+    res.status(500).json({ message: err.message });
   }
 };

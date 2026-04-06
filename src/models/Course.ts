@@ -39,6 +39,9 @@ export interface ICourse extends Document {
 
   /* ✍️ Reviews */
   reviews: IReview[];
+
+  /* ❤️ Saved */
+  savedBy: mongoose.Types.ObjectId[];
 }
 
 /* ================= SCHEMAS ================= */
@@ -80,7 +83,7 @@ const ReviewSchema = new Schema<IReview>(
     },
   },
   {
-    timestamps: true, // adds createdAt & updatedAt
+    timestamps: true,
   }
 );
 
@@ -145,6 +148,13 @@ const CourseSchema = new Schema<ICourse>(
     /* ✍️ REVIEWS */
     reviews: {
       type: [ReviewSchema],
+      default: [],
+    },
+
+    /* ❤️ SAVE FEATURE */
+    savedBy: {
+      type: [Schema.Types.ObjectId],
+      ref: "User",
       default: [],
     },
   },
