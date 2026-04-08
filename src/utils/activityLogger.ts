@@ -1,12 +1,20 @@
 import Activity from "../models/Activity.js";
 
+interface LogActivityParams {
+  user: string;
+  type: "SESSION" | "COURSE" | "SYSTEM";
+  action: string;
+  entityId?: any;
+  metadata?: any;
+}
+
 export const logActivity = async ({
   user,
   type,
   action,
   entityId,
   metadata,
-}: any) => {
+}: LogActivityParams) => {
   try {
     await Activity.create({
       user,
@@ -15,7 +23,7 @@ export const logActivity = async ({
       entityId,
       metadata,
     });
-  } catch (error) {
-    console.error("Activity log failed");
+  } catch (err) {
+    console.error("ACTIVITY LOG ERROR:", err);
   }
 };
