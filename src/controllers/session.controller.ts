@@ -2,6 +2,9 @@ import type { Response } from "express";
 import Session from "../models/Session.js";
 import Profile from "../models/Profile.js";
 import { logActivity } from "../utils/activityLogger.js";
+import Course from "../models/Course.js";
+
+/* ================= CREATE SESSION ================= */
 
 /* ================= CREATE SESSION ================= */
 export const createSession = async (req: any, res: Response) => {
@@ -10,16 +13,54 @@ export const createSession = async (req: any, res: Response) => {
       return res.status(401).json({ message: "Unauthorized" });
     }
 
-    const { tutorId, title, date, duration } = req.body;
+    const { courseId, date, duration, message } = req.body;
 
-    if (!tutorId || !title || !date || !duration) {
+    if (!courseId || !date || !duration) {
       return res.status(400).json({ message: "Missing required fields" });
     }
+
+    const course = await Course.findById(courseId);
+
+    if (!course) {
+      return res.status(404).json({ message: "Course not found" });
+    }
+
+    const tutorId = course.tutor;
 
     const tutorProfile = await Profile.findOne({ user: tutorId });
 
     if (!tutorProfile || !tutorProfile.isTutor) {
       return res.status(400).json({ message: "User is not a tutor" });
+    }
+
+    const sessionStart = new Date(date);
+    const sessionEnd = new Date(
+      sessionStart.getTime() + duration * 60000
+    );
+
+    /* 🔒 DOUBLE BOOKING CHECK */
+    const conflict = await Session.findOne({
+      tutor: tutorId,
+      status: { $in: ["pending", "accepted"] },
+      $expr: {
+        $and: [
+          { $lt: ["$date", sessionEnd] },
+          {
+            $gt: [
+              {
+                $add: ["$date", { $multiply: ["$duration", 60000] }],
+              },
+              sessionStart,
+            ],
+          },
+        ],
+      },
+    });
+
+    if (conflict) {
+      return res.status(400).json({
+        message: "Tutor is not available at this time",
+      });
     }
 
     const price =
@@ -29,19 +70,20 @@ export const createSession = async (req: any, res: Response) => {
     const session = await Session.create({
       student: req.userId,
       tutor: tutorId,
-      title,
+      title: course.title,
+      description: message,
       date,
       duration,
       price,
+      status: "pending",
     });
 
-    // 🔥 Activity
     await logActivity({
       user: req.userId,
       type: "SESSION",
       action: "BOOKED",
       entityId: session._id,
-      metadata: { title, tutorId, date },
+      metadata: { courseId, tutorId, date },
     });
 
     res.status(201).json(session);
