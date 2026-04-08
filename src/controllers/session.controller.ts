@@ -1,10 +1,9 @@
 import type { Response } from "express";
 import Session from "../models/Session.js";
 import Profile from "../models/Profile.js";
-import { logActivity } from "../utils/activityLogger.js";
 import Course from "../models/Course.js";
-
-/* ================= CREATE SESSION ================= */
+import { logActivity } from "../utils/activityLogger.js";
+import { emitNotification } from "../config/socket.js";
 
 /* ================= CREATE SESSION ================= */
 export const createSession = async (req: any, res: Response) => {
@@ -20,7 +19,6 @@ export const createSession = async (req: any, res: Response) => {
     }
 
     const course = await Course.findById(courseId);
-
     if (!course) {
       return res.status(404).json({ message: "Course not found" });
     }
@@ -28,17 +26,16 @@ export const createSession = async (req: any, res: Response) => {
     const tutorId = course.tutor;
 
     const tutorProfile = await Profile.findOne({ user: tutorId });
-
     if (!tutorProfile || !tutorProfile.isTutor) {
       return res.status(400).json({ message: "User is not a tutor" });
     }
 
+    /* 🔒 DOUBLE BOOKING CHECK */
     const sessionStart = new Date(date);
     const sessionEnd = new Date(
       sessionStart.getTime() + duration * 60000
     );
 
-    /* 🔒 DOUBLE BOOKING CHECK */
     const conflict = await Session.findOne({
       tutor: tutorId,
       status: { $in: ["pending", "accepted"] },
@@ -63,10 +60,12 @@ export const createSession = async (req: any, res: Response) => {
       });
     }
 
+    /* 💰 PRICE CALCULATION */
     const price =
       (tutorProfile.tutorProfile?.hourlyRate || 0) *
       (duration / 60);
 
+    /* ✅ CREATE SESSION */
     const session = await Session.create({
       student: req.userId,
       tutor: tutorId,
@@ -78,8 +77,9 @@ export const createSession = async (req: any, res: Response) => {
       status: "pending",
     });
 
+    /* 🔔 STORE NOTIFICATION */
     await logActivity({
-      user: tutorId.toString(), // 🔥 notify tutor
+      user: tutorId.toString(),
       type: "SESSION",
       action: "REQUESTED",
       entityId: session._id.toString(),
@@ -88,6 +88,13 @@ export const createSession = async (req: any, res: Response) => {
         courseId: courseId.toString(),
         date,
       },
+    });
+
+    /* ⚡ REAL-TIME NOTIFICATION */
+    emitNotification(tutorId.toString(), {
+      action: "REQUESTED",
+      message: "New session request received",
+      sessionId: session._id,
     });
 
     res.status(201).json(session);
@@ -128,18 +135,16 @@ export const updateSessionStatus = async (req: any, res: Response) => {
     const { status } = req.body;
 
     const allowedStatuses = ["accepted", "completed", "cancelled"];
-
     if (!allowedStatuses.includes(status)) {
       return res.status(400).json({ message: "Invalid status" });
     }
 
     const session = await Session.findById(req.params.id);
-
     if (!session) {
       return res.status(404).json({ message: "Session not found" });
     }
 
-    // 🔒 Only tutor can update
+    /* 🔒 ONLY TUTOR CAN UPDATE */
     if (session.tutor.toString() !== req.userId) {
       return res.status(403).json({ message: "Not authorized" });
     }
@@ -147,7 +152,7 @@ export const updateSessionStatus = async (req: any, res: Response) => {
     session.status = status;
     await session.save();
 
-    // 🔥 Activity for tutor
+    /* 🔔 STORE ACTIVITY (STUDENT ONLY) */
     await logActivity({
       user: session.student.toString(),
       type: "SESSION",
@@ -155,12 +160,11 @@ export const updateSessionStatus = async (req: any, res: Response) => {
       entityId: session._id.toString(),
     });
 
-    // 🔥 Activity for student
-    await logActivity({
-      user: session.student.toString(),
-      type: "SESSION",
+    /* ⚡ REAL-TIME NOTIFICATION */
+    emitNotification(session.student.toString(), {
       action: status.toUpperCase(),
-      entityId: session._id.toString(),
+      message: `Your session was ${status}`,
+      sessionId: session._id,
     });
 
     res.json(session);
