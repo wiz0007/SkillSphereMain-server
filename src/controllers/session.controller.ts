@@ -79,11 +79,15 @@ export const createSession = async (req: any, res: Response) => {
     });
 
     await logActivity({
-      user: req.userId,
+      user: tutorId.toString(), // 🔥 notify tutor
       type: "SESSION",
-      action: "BOOKED",
-      entityId: session._id,
-      metadata: { courseId, tutorId, date },
+      action: "REQUESTED",
+      entityId: session._id.toString(),
+      metadata: {
+        studentId: req.userId,
+        courseId: courseId.toString(),
+        date,
+      },
     });
 
     res.status(201).json(session);
@@ -145,18 +149,18 @@ export const updateSessionStatus = async (req: any, res: Response) => {
 
     // 🔥 Activity for tutor
     await logActivity({
-      user: req.userId,
+      user: session.student.toString(),
       type: "SESSION",
       action: status.toUpperCase(),
-      entityId: session._id,
+      entityId: session._id.toString(),
     });
 
     // 🔥 Activity for student
     await logActivity({
-      user: session.student,
+      user: session.student.toString(),
       type: "SESSION",
       action: status.toUpperCase(),
-      entityId: session._id,
+      entityId: session._id.toString(),
     });
 
     res.json(session);

@@ -1,20 +1,19 @@
 import mongoose, { Schema, Document } from "mongoose";
 
 export interface IActivity extends Document {
-  user: mongoose.Types.ObjectId;
+  user: mongoose.Types.ObjectId; // who receives notification
 
-  type: "SESSION" | "PROFILE" | "TUTOR";
+  type: "SESSION" | "COURSE" | "SYSTEM";
 
-  action:
-    | "BOOKED"
-    | "ACCEPTED"
-    | "COMPLETED"
-    | "UPDATED"
-    | "BECAME_TUTOR";
+  action: string; // REQUESTED, ACCEPTED, CANCELLED, etc.
 
   entityId?: mongoose.Types.ObjectId;
 
-  metadata?: any;
+  metadata?: Record<string, any>;
+
+  isRead: boolean;
+
+  createdAt: Date;
 }
 
 const ActivitySchema = new Schema<IActivity>(
@@ -27,7 +26,7 @@ const ActivitySchema = new Schema<IActivity>(
 
     type: {
       type: String,
-      enum: ["SESSION", "PROFILE", "TUTOR"],
+      enum: ["SESSION", "COURSE", "SYSTEM"],
       required: true,
     },
 
@@ -36,10 +35,17 @@ const ActivitySchema = new Schema<IActivity>(
       required: true,
     },
 
-    entityId: Schema.Types.ObjectId,
+    entityId: {
+      type: Schema.Types.ObjectId,
+    },
 
     metadata: {
       type: Schema.Types.Mixed,
+    },
+
+    isRead: {
+      type: Boolean,
+      default: false,
     },
   },
   { timestamps: true }
