@@ -11,6 +11,8 @@ export interface IActivity extends Document {
 
   metadata?: Record<string, any>;
 
+  message: string;
+
   isRead: boolean;
 
   createdAt: Date;
@@ -19,10 +21,12 @@ export interface IActivity extends Document {
 const ActivitySchema = new Schema<IActivity>(
   {
     user: {
-      type: Schema.Types.ObjectId,
+      type: mongoose.Schema.Types.ObjectId,
       ref: "User",
       required: true,
     },
+
+
 
     type: {
       type: String,
@@ -36,12 +40,15 @@ const ActivitySchema = new Schema<IActivity>(
     },
 
     entityId: {
-      type: Schema.Types.ObjectId,
+      type: mongoose.Schema.Types.ObjectId,
+      required: false,
     },
 
     metadata: {
       type: Schema.Types.Mixed,
     },
+
+    message: { type: String, required: true },
 
     isRead: {
       type: Boolean,
