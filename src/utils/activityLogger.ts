@@ -1,11 +1,13 @@
 import Activity from "../models/Activity.js";
+import mongoose from "mongoose";
 
 interface LogActivityParams {
   user: string;
-  type: "SESSION" | "COURSE" | "SYSTEM";
+  type: string;
   action: string;
-  entityId?: any;
-  metadata?: any;
+  entityId?: string;
+  message?: string;
+  metadata?: Record<string, any>;
 }
 
 export const logActivity = async ({
@@ -13,16 +15,28 @@ export const logActivity = async ({
   type,
   action,
   entityId,
-  metadata,
+  message,
+  metadata = {},
 }: LogActivityParams) => {
   try {
-    await Activity.create({
-      user,
+    if (!user) return;
+
+    let finalMessage = message || "New activity";
+
+    const activityData: any = {
+      user: new mongoose.Types.ObjectId(user),
       type,
       action,
-      entityId,
+      message: finalMessage,
       metadata,
-    });
+      isRead: false,
+    };
+
+    if (entityId) {
+      activityData.entityId = new mongoose.Types.ObjectId(entityId);
+    }
+
+    await Activity.create(activityData);
   } catch (err) {
     console.error("ACTIVITY LOG ERROR:", err);
   }
