@@ -1,4 +1,4 @@
-import { RequestHandler } from "express";
+import type { RequestHandler } from "express";
 import Session from "../models/Session.js";
 import Profile from "../models/Profile.js";
 import Course from "../models/Course.js";
