@@ -4,8 +4,8 @@ import { protect } from "../middlewares/protect.js";
 
 const router = express.Router();
 
-router.get("/notifications/unread-count", protect, getUnreadCount);
-router.get("/notifications", protect, getNotifications);
-router.patch("/notifications/:id/read", protect, markAsRead);
+router.get("/unread-count", protect, getUnreadCount);
+router.get("/", protect, getNotifications);
+router.patch("/:id/read", protect, markAsRead);
 
 export default router;

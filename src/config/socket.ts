@@ -8,8 +8,11 @@ const users = new Map<string, string>();
 export const initSocket = (server: http.Server) => {
   io = new Server(server, {
     cors: {
-      origin: "*",
-      credentials: true,
+      origin: [
+      "http://localhost:5173",
+      "https://skill-sphere-main-client-oh1p.vercel.app/", // update this
+    ],
+    credentials: true,
     },
   });
 
