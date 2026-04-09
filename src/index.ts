@@ -24,14 +24,21 @@ configureCloudinary();
 
 const app = express();
 
-app.use(cors());
+app.use(cors({
+  origin: [
+    "http://localhost:5173",
+    "https://skill-sphere-main-client-oh1p.vercel.app/",
+  ],
+  credentials: true,
+}));
+
 app.use(express.json());
 
 /* ROUTES */
 app.use("/api/auth", authRoutes);
 app.use("/api/profile", profileRoutes);
 app.use("/api/sessions", sessionRoutes);
-app.use("/api/activity", activityRoutes);
+app.use("/api/notifications", activityRoutes);
 app.use("/api/courses", courseRoutes);
 
 /* ✅ CREATE HTTP SERVER */
