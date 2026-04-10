@@ -5,30 +5,45 @@ export interface IUser extends Document {
   email: string;
   password: string;
   profileCompleted: boolean;
+
+  isVerified: boolean;
+  otp?: string | undefined;
+  otpExpires?: Date | undefined;
 }
 
 const UserSchema = new Schema<IUser>(
   {
     username: {
       type: String,
-      required: true
+      required: true,
+      unique: true,
+      lowercase: true,
+      trim: true,
     },
 
     email: {
       type: String,
       required: true,
-      unique: true
+      unique: true,
     },
 
     password: {
       type: String,
-      required: true
+      required: true,
     },
 
     profileCompleted: {
       type: Boolean,
-      default: false
-    }
+      default: false,
+    },
+
+    isVerified: {
+      type: Boolean,
+      default: false,
+    },
+
+    otp: String,
+    otpExpires: Date,
   },
   { timestamps: true }
 );
