@@ -3,6 +3,8 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import User from "../models/User.js";
 import Profile from "../models/Profile.js";
+import { generateOTP } from "../utils/generateOtp.js";
+import { sendOTPEmail } from "../utils/sendEmail.js";
 
 const generateToken = (id: string) => {
   return jwt.sign({ id }, process.env.JWT_SECRET as string, {
@@ -12,49 +14,55 @@ const generateToken = (id: string) => {
 
 /* ================= REGISTER ================= */
 
+
+
+
 export const register = async (req: Request, res: Response) => {
   try {
-
     const { username, email, password } = req.body;
 
-    if (!email || !password) {
+    // 🔒 Strong password
+    const passwordRegex =
+      /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&]).{8,}$/;
+
+    if (!passwordRegex.test(password)) {
       return res.status(400).json({
-        message: "Email and password required"
+        message: "Weak password",
       });
     }
 
-    const userExists = await User.findOne({ email });
+    // ✅ Check duplicates
+    if (await User.findOne({ email })) {
+      return res.status(400).json({ message: "Email already exists" });
+    }
 
-    if (userExists) {
-      return res.status(400).json({
-        message: "User already exists"
-      });
+    if (await User.findOne({ username })) {
+      return res.status(400).json({ message: "Username taken" });
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
 
+    const otp = generateOTP();
+
     const user = await User.create({
       username,
       email,
-      password: hashedPassword
+      password: hashedPassword,
+      otp: await bcrypt.hash(otp, 10),
+      otpExpires: Date.now() + 10 * 60 * 1000,
     });
+
+    await sendOTPEmail(email, otp);
 
     res.status(201).json({
-      token: generateToken(user._id.toString()),
-      user
+      message: "OTP sent",
+      userId: user._id,
     });
 
-  } catch (error) {
-
-    console.error("REGISTER ERROR:", error);
-
-    res.status(500).json({
-      message: "Registration failed"
-    });
-
+  } catch (err) {
+    res.status(500).json({ message: "Registration failed" });
   }
 };
-
 /* ================= LOGIN ================= */
 
 export const login = async (req: Request, res: Response) => {
@@ -63,9 +71,16 @@ export const login = async (req: Request, res: Response) => {
 
     const user = await User.findOne({ email });
 
+
     if (!user) {
       return res.status(400).json({
         message: "Invalid credentials",
+      });
+    }
+
+    if (!user.isVerified) {
+      return res.status(400).json({
+        message: "Please verify your email first",
       });
     }
 
@@ -95,4 +110,33 @@ export const login = async (req: Request, res: Response) => {
       message: "Login failed",
     });
   }
+};
+
+
+export const verifyOTP = async (req: Request, res: Response) => {
+  const { userId, otp } = req.body;
+
+  const user = await User.findById(userId);
+
+  if (!user || !user.otp) {
+    return res.status(400).json({ message: "Invalid request" });
+  }
+
+  if (user.otpExpires! < new Date()) {
+    return res.status(400).json({ message: "OTP expired" });
+  }
+
+  const match = await bcrypt.compare(otp, user.otp);
+
+  if (!match) {
+    return res.status(400).json({ message: "Invalid OTP" });
+  }
+
+  user.isVerified = true;
+  user.otp = undefined;
+  user.otpExpires = undefined;
+
+  await user.save();
+
+  res.json({ message: "Verified successfully" });
 };
