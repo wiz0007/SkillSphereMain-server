@@ -10,7 +10,7 @@ export const initSocket = (server: http.Server) => {
     cors: {
       origin: [
       "http://localhost:5173",
-      "https://skill-sphere-main-client-oh1p.vercel.app/", // update this
+      "https://skill-sphere-main-client-oh1p.vercel.app",
     ],
     credentials: true,
     },

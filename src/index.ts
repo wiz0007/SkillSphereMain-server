@@ -27,7 +27,7 @@ const app = express();
 app.use(cors({
   origin: [
     "http://localhost:5173",
-    "https://skill-sphere-main-client-oh1p.vercel.app/",
+    "https://skill-sphere-main-client-oh1p.vercel.app",
   ],
   credentials: true,
 }));
