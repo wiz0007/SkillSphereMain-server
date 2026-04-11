@@ -140,3 +140,16 @@ export const verifyOTP = async (req: Request, res: Response) => {
 
   res.json({ message: "Verified successfully" });
 };
+
+// controller
+export const checkUsername = async (req: Request, res: Response) => {
+  const { username } = req.params;
+
+  if (!username) {
+    return res.status(400).json({ message: "Username is required" });
+  }
+
+  const exists = await User.findOne({ username });
+
+  res.json({ available: !exists });
+};
