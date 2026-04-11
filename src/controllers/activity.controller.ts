@@ -1,38 +1,102 @@
+import type { RequestHandler } from "express";
+import mongoose from "mongoose";
 import Activity from "../models/Activity.js";
 
-export const getNotifications = async (req: any, res: any) => {
+/* ================= HELPERS ================= */
+
+const isValidObjectId = (id: string) =>
+  mongoose.Types.ObjectId.isValid(id);
+
+const getId = (param: unknown): string => {
+  if (typeof param === "string") return param;
+  if (Array.isArray(param) && typeof param[0] === "string") return param[0];
+  return "";
+};
+
+/* ================= GET ALL ================= */
+
+export const getNotifications: RequestHandler = async (req, res) => {
   try {
+    const { userId } = req;
+
+    if (!userId) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+
     const notifications = await Activity.find({
-      user: req.userId,
+      user: new mongoose.Types.ObjectId(userId),
     }).sort({ createdAt: -1 });
 
-    res.json(notifications);
-  } catch {
-    res.status(500).json({ message: "Error fetching notifications" });
+    return res.json(notifications);
+
+  } catch (err) {
+    console.error("GET NOTIFICATIONS ERROR:", err);
+    return res.status(500).json({
+      message: "Error fetching notifications",
+    });
   }
 };
 
-export const getUnreadCount = async (req: any, res: any) => {
+/* ================= UNREAD COUNT ================= */
+
+export const getUnreadCount: RequestHandler = async (req, res) => {
   try {
+    const { userId } = req;
+
+    if (!userId) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+
     const count = await Activity.countDocuments({
-      user: req.userId,
+      user: new mongoose.Types.ObjectId(userId),
       isRead: false,
     });
 
-    res.json({ count });
-  } catch {
-    res.status(500).json({ message: "Error fetching count" });
+    return res.json({ count });
+
+  } catch (err) {
+    console.error("UNREAD COUNT ERROR:", err);
+    return res.status(500).json({
+      message: "Error fetching count",
+    });
   }
 };
 
-export const markAsRead = async (req: any, res: any) => {
-  try {
-    await Activity.findByIdAndUpdate(req.params.id, {
-      isRead: true,
-    });
+/* ================= MARK AS READ ================= */
 
-    res.json({ success: true });
-  } catch {
-    res.status(500).json({ message: "Error updating" });
+export const markAsRead: RequestHandler = async (req, res) => {
+  try {
+    const { userId } = req;
+    const id = getId(req.params.id);
+
+    if (!userId) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+
+    if (!isValidObjectId(id)) {
+      return res.status(400).json({ message: "Invalid ID" });
+    }
+
+    const notification = await Activity.findById(id);
+
+    if (!notification) {
+      return res.status(404).json({ message: "Not found" });
+    }
+
+    /* 🔒 OWNERSHIP CHECK (IMPORTANT) */
+    if (notification.user.toString() !== userId.toString()) {
+      return res.status(403).json({ message: "Not authorized" });
+    }
+
+    notification.isRead = true;
+    await notification.save();
+
+    return res.json({ success: true });
+
+  } catch (err) {
+    console.error("MARK READ ERROR:", err);
+    return res.status(500).json({
+      message: "Error updating",
+    });
   }
 };

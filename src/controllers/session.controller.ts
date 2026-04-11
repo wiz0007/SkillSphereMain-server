@@ -1,14 +1,27 @@
 import type { RequestHandler } from "express";
+import mongoose from "mongoose";
 import Session from "../models/Session.js";
 import Profile from "../models/Profile.js";
 import Course from "../models/Course.js";
 import { logActivity } from "../utils/activityLogger.js";
 import { emitNotification } from "../config/socket.js";
 
+/* ================= HELPERS ================= */
+
+const isValidObjectId = (id: string) =>
+  mongoose.Types.ObjectId.isValid(id);
+
+const getId = (param: unknown): string => {
+  if (typeof param === "string") return param;
+  if (Array.isArray(param) && typeof param[0] === "string") return param[0];
+  return "";
+};
+
 /* ================= CREATE SESSION ================= */
-export const createSession: RequestHandler = async (req: any, res) => {
+
+export const createSession: RequestHandler = async (req, res) => {
   try {
-    const userId = req.userId;
+    const { userId } = req;
 
     if (!userId) {
       return res.status(401).json({ message: "Unauthorized" });
@@ -17,7 +30,11 @@ export const createSession: RequestHandler = async (req: any, res) => {
     const { courseId, date, duration, message } = req.body;
 
     if (!courseId || !date || !duration) {
-      return res.status(400).json({ message: "Missing required fields" });
+      return res.status(400).json({ message: "Missing fields" });
+    }
+
+    if (!isValidObjectId(courseId)) {
+      return res.status(400).json({ message: "Invalid course ID" });
     }
 
     const course = await Course.findById(courseId);
@@ -27,34 +44,35 @@ export const createSession: RequestHandler = async (req: any, res) => {
 
     const tutorId = course.tutor;
 
-    /* ❌ PREVENT SELF BOOKING (IMPORTANT) */
+    /* ❌ PREVENT SELF BOOKING */
     if (tutorId.toString() === userId.toString()) {
       return res.status(400).json({
-        message: "You cannot book your own course",
+        message: "Cannot book your own course",
       });
     }
 
     const tutorProfile = await Profile.findOne({ user: tutorId });
+
     if (!tutorProfile || !tutorProfile.isTutor) {
       return res.status(400).json({ message: "User is not a tutor" });
     }
 
     /* 🔒 DOUBLE BOOKING CHECK */
-    const sessionStart = new Date(date);
-    const sessionEnd = new Date(sessionStart.getTime() + duration * 60000);
+    const start = new Date(date);
+    const end = new Date(start.getTime() + duration * 60000);
 
     const conflict = await Session.findOne({
       tutor: tutorId,
       status: { $in: ["pending", "accepted"] },
       $expr: {
         $and: [
-          { $lt: ["$date", sessionEnd] },
+          { $lt: ["$date", end] },
           {
             $gt: [
               {
                 $add: ["$date", { $multiply: ["$duration", 60000] }],
               },
-              sessionStart,
+              start,
             ],
           },
         ],
@@ -63,18 +81,17 @@ export const createSession: RequestHandler = async (req: any, res) => {
 
     if (conflict) {
       return res.status(400).json({
-        message: "Tutor is not available at this time",
+        message: "Tutor not available at this time",
       });
     }
 
-    /* 💰 PRICE */
+    /* 💰 PRICE CALCULATION */
     const price =
       (tutorProfile.tutorProfile?.hourlyRate || 0) *
       (duration / 60);
 
-    /* ✅ CREATE */
     const session = await Session.create({
-      student: userId,
+      student: new mongoose.Types.ObjectId(userId),
       tutor: tutorId,
       title: course.title,
       description: message,
@@ -84,87 +101,91 @@ export const createSession: RequestHandler = async (req: any, res) => {
       status: "pending",
     });
 
-    /* 🔔 STORE NOTIFICATION (RICH MESSAGE) */
-    const studentName = req.userName || "A student";
-
-    const notificationMessage = `${studentName} requested "${course.title}" on ${new Date(
-      date
-    ).toLocaleString()}`;
+    /* 🔔 NOTIFICATION */
+    const msg = `A student requested "${course.title}"`;
 
     await logActivity({
       user: tutorId.toString(),
       type: "SESSION",
       action: "REQUESTED",
       entityId: session._id.toString(),
-      message: notificationMessage,
-      metadata: {
-        studentId: userId,
-        courseId: courseId.toString(),
-        date,
-      },
+      message: msg,
+      metadata: { courseId, date },
     });
 
-    /* ⚡ REAL-TIME */
     emitNotification(tutorId.toString(), {
       action: "REQUESTED",
-      message: notificationMessage,
+      message: msg,
       sessionId: session._id,
     });
 
     return res.status(201).json(session);
-  } catch (error) {
-    console.error("CREATE SESSION ERROR:", error);
+
+  } catch (err) {
+    console.error("CREATE SESSION ERROR:", err);
     return res.status(500).json({ message: "Error creating session" });
   }
 };
 
 /* ================= GET MY SESSIONS ================= */
-export const getMySessions: RequestHandler = async (req: any, res) => {
+
+export const getMySessions: RequestHandler = async (req, res) => {
   try {
-    const userId = req.userId;
+    const { userId } = req;
 
     if (!userId) {
       return res.status(401).json({ message: "Unauthorized" });
     }
 
+    const userObjectId = new mongoose.Types.ObjectId(userId);
+
     const sessions = await Session.find({
-      $or: [{ student: userId }, { tutor: userId }],
+      $or: [{ student: userObjectId }, { tutor: userObjectId }],
     })
       .populate("student", "name email")
       .populate("tutor", "name email")
       .sort({ date: -1 });
 
     return res.json(sessions);
-  } catch (error) {
-    console.error("GET SESSIONS ERROR:", error);
+
+  } catch (err) {
+    console.error("GET SESSIONS ERROR:", err);
     return res.status(500).json({ message: "Error fetching sessions" });
   }
 };
 
-/* ================= UPDATE SESSION STATUS ================= */
-export const updateSessionStatus: RequestHandler = async (req: any, res) => {
+/* ================= UPDATE SESSION ================= */
+
+export const updateSessionStatus: RequestHandler = async (req, res) => {
   try {
-    const userId = req.userId;
+    const { userId } = req;
+    const id = getId(req.params.id);
 
     if (!userId) {
       return res.status(401).json({ message: "Unauthorized" });
     }
 
-    const { status } = req.body;
+    if (!isValidObjectId(id)) {
+      return res.status(400).json({ message: "Invalid session ID" });
+    }
 
-    const allowedStatuses = ["accepted", "completed", "cancelled"];
+    const status = req.body.status as
+      | "accepted"
+      | "completed"
+      | "cancelled";
 
-    if (!allowedStatuses.includes(status)) {
+    const allowed = ["accepted", "completed", "cancelled"] as const;
+
+    if (!allowed.includes(status)) {
       return res.status(400).json({ message: "Invalid status" });
     }
 
-    const session = await Session.findById(req.params.id);
+    const session = await Session.findById(id);
 
     if (!session) {
-      return res.status(404).json({ message: "Session not found" });
+      return res.status(404).json({ message: "Not found" });
     }
 
-    /* 🔒 ONLY TUTOR CAN UPDATE */
     if (session.tutor.toString() !== userId.toString()) {
       return res.status(403).json({ message: "Not authorized" });
     }
@@ -172,34 +193,32 @@ export const updateSessionStatus: RequestHandler = async (req: any, res) => {
     session.status = status;
     await session.save();
 
-    /* 🔔 MESSAGE */
-    const messageMap: any = {
-      accepted: "Your session request has been accepted ✅",
-      cancelled: "Your session request was rejected ❌",
-      completed: "Your session has been marked completed 🎉",
+    const msgMap: Record<typeof status, string> = {
+      accepted: "Session accepted ✅",
+      cancelled: "Session rejected ❌",
+      completed: "Session completed 🎉",
     };
 
-    const notificationMessage = messageMap[status] || "Session updated";
+    const message = msgMap[status] || "Session updated";
 
-    /* 🔔 STORE */
     await logActivity({
       user: session.student.toString(),
       type: "SESSION",
       action: status.toUpperCase(),
       entityId: session._id.toString(),
-      message: notificationMessage,
+      message,
     });
 
-    /* ⚡ REAL-TIME */
     emitNotification(session.student.toString(), {
       action: status.toUpperCase(),
-      message: notificationMessage,
+      message,
       sessionId: session._id,
     });
 
     return res.json(session);
-  } catch (error) {
-    console.error("UPDATE SESSION ERROR:", error);
+
+  } catch (err) {
+    console.error("UPDATE SESSION ERROR:", err);
     return res.status(500).json({ message: "Error updating session" });
   }
 };

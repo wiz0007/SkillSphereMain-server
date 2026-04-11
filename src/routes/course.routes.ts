@@ -14,20 +14,58 @@ import {
 } from "../controllers/course.controller.js";
 
 import { protect } from "../middlewares/protect.js";
+import { validate } from "../middlewares/validate.js";
+import { createCourseSchema, reviewSchema, ratingSchema } from "../validators/course.validator.js";
+import { loginLimiter } from "../middlewares/rateLimiter.js";
 
 const router = express.Router();
 
-router.post("/", protect, createCourse);
-router.get("/my", protect, getMyCourses);
+/* ================= PUBLIC ================= */
+
 router.get("/", getAllCourses);
+router.get("/:id", getCourseById); // ✅ FIXED (public)
+
+/* ================= PRIVATE ================= */
+
+router.post(
+  "/",
+  protect,
+  validate(createCourseSchema), // ✅ validation
+  createCourse
+);
+
+router.get("/my", protect, getMyCourses);
+
 router.get("/saved", protect, getSavedCourses);
 
+router.put(
+  "/:id",
+  protect,
+  validate(createCourseSchema),
+  updateCourse
+);
 
-router.get("/:id", protect, getCourseById);
-router.put("/:id", protect, updateCourse);
 router.delete("/:id", protect, deleteCourse);
-router.post("/:id/rate", protect, rateCourse);
-router.post("/:id/review", protect, addReview);
+
+/* ⭐ RATE */
+router.post(
+  "/:id/rate",
+  protect,
+  loginLimiter, // ✅ prevent spam
+  validate(ratingSchema),
+  rateCourse
+);
+
+/* 💬 REVIEW */
+router.post(
+  "/:id/review",
+  protect,
+  loginLimiter, // ✅ prevent spam
+  validate(reviewSchema),
+  addReview
+);
+
+/* ❤️ SAVE */
 router.post("/:id/save", protect, saveCourse);
 router.delete("/:id/save", protect, unsaveCourse);
 

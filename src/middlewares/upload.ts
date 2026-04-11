@@ -1,18 +1,18 @@
 import multer from "multer";
-import { CloudinaryStorage } from "multer-storage-cloudinary";
-import cloudinary from "../config/cloudinary.js";
 
-const storage = new CloudinaryStorage({
-  cloudinary,
-  params: async (req, file) => {
-  return {
-    folder: "skillshare_profiles",
-    allowed_formats: ["jpg", "jpeg", "png", "webp"],
-    transformation: [{ width: 500, height: 500, crop: "fill" }]
-  };
-}
+const storage = multer.diskStorage({});
+
+const fileFilter: multer.Options["fileFilter"] = (req, file, cb) => {
+  if (!file.mimetype.startsWith("image/")) {
+    return cb(new Error("Only images allowed"));
+  }
+  cb(null, true);
+};
+
+export const upload = multer({
+  storage,
+  limits: {
+    fileSize: 2 * 1024 * 1024, // 2MB
+  },
+  fileFilter,
 });
-
-const upload = multer({ storage });
-
-export default upload;

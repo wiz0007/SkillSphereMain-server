@@ -1,4 +1,4 @@
-import type { Request, Response } from "express";
+import type { RequestHandler } from "express";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import User from "../models/User.js";
@@ -8,30 +8,27 @@ import { sendOTPEmail } from "../utils/sendEmail.js";
 
 const generateToken = (id: string) => {
   return jwt.sign({ id }, process.env.JWT_SECRET as string, {
-    expiresIn: "7d"
+    expiresIn: "7d",
   });
 };
 
 /* ================= REGISTER ================= */
 
-
-
-
-export const register = async (req: Request, res: Response) => {
+export const register: RequestHandler = async (req, res) => {
   try {
     const { username, email, password } = req.body;
 
-    // 🔒 Strong password
+    if (!username || !email || !password) {
+      return res.status(400).json({ message: "All fields required" });
+    }
+
     const passwordRegex =
       /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&]).{8,}$/;
 
     if (!passwordRegex.test(password)) {
-      return res.status(400).json({
-        message: "Weak password",
-      });
+      return res.status(400).json({ message: "Weak password" });
     }
 
-    // ✅ Check duplicates
     if (await User.findOne({ email })) {
       return res.status(400).json({ message: "Email already exists" });
     }
@@ -50,32 +47,33 @@ export const register = async (req: Request, res: Response) => {
       password: hashedPassword,
       otp: await bcrypt.hash(otp, 10),
       otpExpires: Date.now() + 10 * 60 * 1000,
+      otpAttempts: 0,
+      lockUntil: undefined,
     });
 
     await sendOTPEmail(email, otp);
 
-    res.status(201).json({
+    return res.status(201).json({
       message: "OTP sent",
       userId: user._id,
     });
 
-  } catch (err) {
-    res.status(500).json({ message: "Registration failed" });
+  } catch (err: any) {
+    console.error("REGISTER ERROR:", err);
+    return res.status(500).json({ message: "Registration failed" });
   }
 };
+
 /* ================= LOGIN ================= */
 
-export const login = async (req: Request, res: Response) => {
+export const login: RequestHandler = async (req, res) => {
   try {
     const { email, password } = req.body;
 
     const user = await User.findOne({ email });
 
-
     if (!user) {
-      return res.status(400).json({
-        message: "Invalid credentials",
-      });
+      return res.status(400).json({ message: "Invalid credentials" });
     }
 
     if (!user.isVerified) {
@@ -84,72 +82,138 @@ export const login = async (req: Request, res: Response) => {
       });
     }
 
-    const isMatch = await bcrypt.compare(password, user.password);
-
-    if (!isMatch) {
-      return res.status(400).json({
-        message: "Invalid credentials",
+    /* 🔒 ACCOUNT LOCK CHECK (MISSING BEFORE — FIXED) */
+    if (user.lockUntil && user.lockUntil > new Date()) {
+      return res.status(403).json({
+        message: "Account temporarily locked. Try later.",
       });
     }
 
-    // 🔥 GET PROFILE
+    const isMatch = await bcrypt.compare(password, user.password);
+
+    if (!isMatch) {
+      return res.status(400).json({ message: "Invalid credentials" });
+    }
+
     const profile = await Profile.findOne({ user: user._id });
 
-
-    res.json({
+    return res.json({
       token: generateToken(user._id.toString()),
       user: {
         ...user.toObject(),
         isTutor: profile?.isTutor || false,
-        profilePhoto: profile?.profilePhoto || "", // ✅ ADD THIS
+        profilePhoto: profile?.profilePhoto || "",
       },
     });
 
-  } catch (error) {
-    res.status(500).json({
-      message: "Login failed",
-    });
+  } catch (error: any) {
+    console.error("LOGIN ERROR:", error);
+    return res.status(500).json({ message: "Login failed" });
   }
 };
 
+/* ================= VERIFY OTP ================= */
 
-export const verifyOTP = async (req: Request, res: Response) => {
-  const { userId, otp } = req.body;
+export const verifyOTP: RequestHandler = async (req, res) => {
+  try {
+    const { userId, otp } = req.body;
 
-  const user = await User.findById(userId);
+    const user = await User.findById(userId);
 
-  if (!user || !user.otp) {
-    return res.status(400).json({ message: "Invalid request" });
+    if (!user || !user.otp) {
+      return res.status(400).json({ message: "Invalid request" });
+    }
+
+    if (user.lockUntil && user.lockUntil > new Date()) {
+      return res.status(403).json({
+        message: "Too many attempts. Try later.",
+      });
+    }
+
+    if (!user.otpExpires || user.otpExpires < new Date()) {
+      return res.status(400).json({ message: "OTP expired" });
+    }
+
+    const match = await bcrypt.compare(otp, user.otp);
+
+    if (!match) {
+      user.otpAttempts += 1;
+
+      if (user.otpAttempts >= 5) {
+        user.lockUntil = new Date(Date.now() + 15 * 60 * 1000);
+        user.otpAttempts = 0;
+      }
+
+      await user.save();
+
+      return res.status(400).json({ message: "Invalid OTP" });
+    }
+
+    user.isVerified = true;
+    user.otp = undefined;
+    user.otpExpires = undefined;
+    user.otpAttempts = 0;
+    user.lockUntil = undefined;
+
+    await user.save();
+
+    return res.json({ message: "Verified successfully" });
+
+  } catch (err) {
+    return res.status(500).json({ message: "Verification failed" });
   }
-
-  if (user.otpExpires! < new Date()) {
-    return res.status(400).json({ message: "OTP expired" });
-  }
-
-  const match = await bcrypt.compare(otp, user.otp);
-
-  if (!match) {
-    return res.status(400).json({ message: "Invalid OTP" });
-  }
-
-  user.isVerified = true;
-  user.otp = undefined;
-  user.otpExpires = undefined;
-
-  await user.save();
-
-  res.json({ message: "Verified successfully" });
 };
 
-// controller
-export const checkUsername = async (req: Request, res: Response) => {
-  const { username } = req.params;
+/* ================= RESEND OTP ================= */
 
-  if (!username) {
-    return res.status(400).json({ message: "Username is required" });
+export const resendOTP: RequestHandler = async (req, res) => {
+  try {
+    const { userId } = req.body;
+
+    const user = await User.findById(userId);
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    if (user.lockUntil && user.lockUntil > new Date()) {
+      return res.status(403).json({
+        message: "Account locked. Try later.",
+      });
+    }
+
+    const otp = generateOTP();
+
+    user.otp = await bcrypt.hash(otp, 10);
+    user.otpExpires = new Date(Date.now() + 10 * 60 * 1000);
+    user.otpAttempts = 0;
+
+    await user.save();
+
+    await sendOTPEmail(user.email, otp);
+
+    return res.json({ message: "OTP resent" });
+
+  } catch {
+    return res.status(500).json({ message: "Failed to resend OTP" });
   }
+};
 
-  const exists = await User.findOne({ username });
+/* ================= USERNAME CHECK ================= */
 
-  res.json({ available: !exists });
+export const checkUsername: RequestHandler = async (req, res) => {
+  try {
+    const { username } = req.params;
+
+    if (!username) {
+      return res.status(400).json({ message: "Username required" });
+    }
+
+    const exists = await User.findOne({ username });
+
+    return res.json({ available: !exists });
+
+  } catch {
+    return res.status(500).json({ message: "Server error" });
+  }
 };
