@@ -4,27 +4,53 @@ import {
   getMyProfile,
   uploadPhoto,
   becomeTutor,
-  updateProfile
+  updateProfile,
 } from "../controllers/profile.controller.js";
 
 import { protect } from "../middlewares/protect.js";
-import upload from "../middlewares/upload.js";
+import { upload } from "../middlewares/upload.js";
+import { validate } from "../middlewares/validate.js";
+
+import {
+  profileSchema,
+  tutorSchema,
+} from "../validators/profile.validator.js";
 
 const router = express.Router();
 
-router.post("/", protect, createProfile);
+/* ================= CREATE PROFILE ================= */
+router.post(
+  "/",
+  protect,
+  validate(profileSchema), // ✅ validation added
+  createProfile
+);
 
+/* ================= GET PROFILE ================= */
 router.get("/me", protect, getMyProfile);
 
+/* ================= UPLOAD PHOTO ================= */
 router.post(
   "/upload-photo",
+  protect, // ✅ FIXED (IMPORTANT)
   upload.single("profilePhoto"),
   uploadPhoto
 );
 
-router.post("/become-tutor", protect, becomeTutor);
+/* ================= BECOME TUTOR ================= */
+router.post(
+  "/become-tutor",
+  protect,
+  validate(tutorSchema), // ✅ validation added
+  becomeTutor
+);
 
-router.put("/", protect, updateProfile);
-
+/* ================= UPDATE PROFILE ================= */
+router.put(
+  "/",
+  protect,
+  validate(profileSchema), // ✅ validation added
+  updateProfile
+);
 
 export default router;

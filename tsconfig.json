@@ -15,6 +15,8 @@
     // "types": ["node"],
     // and npm install -D @types/node
 
+    
+
     // Other Outputs
     "sourceMap": true,
     "declaration": true,
@@ -33,6 +35,7 @@
     // "noPropertyAccessFromIndexSignature": true,
 
     // Recommended Options
+    "typeRoots": ["./node_modules/@types", "./src/types"],
     "strict": true,
     "jsx": "react-jsx",
     "verbatimModuleSyntax": true,
