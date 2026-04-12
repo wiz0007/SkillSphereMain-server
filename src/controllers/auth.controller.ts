@@ -12,11 +12,13 @@ const generateToken = (id: string) => {
   });
 };
 
-/* ================= REGISTER ================= */
+
 
 export const register: RequestHandler = async (req, res) => {
   try {
     const { username, email, password } = req.body;
+
+    /* ================= VALIDATION ================= */
 
     if (!username || !email || !password) {
       return res.status(400).json({ message: "All fields required" });
@@ -29,6 +31,8 @@ export const register: RequestHandler = async (req, res) => {
       return res.status(400).json({ message: "Weak password" });
     }
 
+    /* ================= UNIQUE CHECK ================= */
+
     if (await User.findOne({ email })) {
       return res.status(400).json({ message: "Email already exists" });
     }
@@ -37,8 +41,9 @@ export const register: RequestHandler = async (req, res) => {
       return res.status(400).json({ message: "Username taken" });
     }
 
-    const hashedPassword = await bcrypt.hash(password, 10);
+    /* ================= CREATE USER ================= */
 
+    const hashedPassword = await bcrypt.hash(password, 10);
     const otp = generateOTP();
 
     const user = await User.create({
@@ -46,21 +51,34 @@ export const register: RequestHandler = async (req, res) => {
       email,
       password: hashedPassword,
       otp: await bcrypt.hash(otp, 10),
-      otpExpires: Date.now() + 10 * 60 * 1000,
+      otpExpires: new Date(Date.now() + 10 * 60 * 1000),
       otpAttempts: 0,
       lockUntil: undefined,
     });
 
-    await sendOTPEmail(email, otp);
+    /* ================= EMAIL (NON-BLOCKING) ================= */
+
+    sendOTPEmail(email, otp)
+      .then(() => {
+        console.log("OTP email sent to:", email);
+      })
+      .catch((err) => {
+        console.error("EMAIL FAILED:", err.message);
+      });
+
+    /* ================= RESPONSE ================= */
 
     return res.status(201).json({
-      message: "OTP sent",
+      message: "Account created. OTP sent to email.",
       userId: user._id,
     });
 
   } catch (err: any) {
     console.error("REGISTER ERROR:", err);
-    return res.status(500).json({ message: "Registration failed" });
+
+    return res.status(500).json({
+      message: err.message || "Registration failed",
+    });
   }
 };
 
