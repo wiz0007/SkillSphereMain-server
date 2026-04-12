@@ -5,7 +5,7 @@ export const loginLimiter = rateLimit({
   windowMs: 10 * 60 * 1000,
   max: 5,
   message: "Too many login attempts. Try again later.",
-  keyGenerator: (req) => req.ip + (req.body.email || ""),
+  keyGenerator: (req:any) => req.ip + (req.body.email || ""),
 });
 
 /* 📧 OTP */
