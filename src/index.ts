@@ -16,6 +16,7 @@ import courseRoutes from "./routes/course.routes.js";
 
 import { configureCloudinary } from "./config/cloudinary.js";
 import { errorHandler } from "./middlewares/errorHandler.js";
+import { globalLimiter } from "./middlewares/rateLimiter.js";
 
 /* ================= ENV ================= */
 
@@ -27,6 +28,7 @@ dotenv.config({
 
 const app = express();
 
+/* 🔥 REQUIRED FOR RENDER / PROXY */
 app.set("trust proxy", 1);
 
 /* ================= SECURITY ================= */
@@ -44,6 +46,9 @@ app.use(
     credentials: true,
   })
 );
+
+/* 🚦 GLOBAL RATE LIMITER */
+app.use(globalLimiter);
 
 /* 📦 BODY LIMIT (DoS protection) */
 app.use(express.json({ limit: "10kb" }));
@@ -74,7 +79,7 @@ const PORT = process.env.PORT || 5000;
 
 const startServer = async () => {
   try {
-    await connectDB(); // ✅ WAIT FOR DB
+    await connectDB();
     configureCloudinary();
 
     const server = http.createServer(app);
