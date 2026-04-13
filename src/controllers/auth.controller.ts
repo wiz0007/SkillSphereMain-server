@@ -53,7 +53,6 @@ export const register: RequestHandler = async (req, res) => {
       otp: await bcrypt.hash(otp, 10),
       otpExpires: new Date(Date.now() + 10 * 60 * 1000),
       otpAttempts: 0,
-      lockUntil: undefined,
     });
 
     /* ================= EMAIL (NON-BLOCKING) ================= */
