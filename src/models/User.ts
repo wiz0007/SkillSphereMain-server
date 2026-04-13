@@ -8,12 +8,11 @@ export interface IUser extends Document {
 
   isVerified: boolean;
 
-  otp?: string | undefined;
-  otpExpires?: Date | undefined;
+  otp?: string;
+  otpExpires?: Date;
 
-  /* 🔐 SECURITY FIELDS */
   otpAttempts: number;
-  lockUntil?: Date | undefined;
+  lockUntil?: Date;
 }
 
 const UserSchema = new Schema<IUser>(
@@ -30,6 +29,8 @@ const UserSchema = new Schema<IUser>(
       type: String,
       required: true,
       unique: true,
+      lowercase: true,
+      trim: true,
     },
 
     password: {
@@ -48,13 +49,8 @@ const UserSchema = new Schema<IUser>(
     },
 
     /* OTP */
-    otp: {
-      type: String,
-    },
-
-    otpExpires: {
-      type: Date,
-    },
+    otp: String,
+    otpExpires: Date,
 
     /* 🔐 SECURITY */
     otpAttempts: {
@@ -62,15 +58,9 @@ const UserSchema = new Schema<IUser>(
       default: 0,
     },
 
-    lockUntil: {
-      type: Date,
-    },
+    lockUntil: Date,
   },
   { timestamps: true }
 );
-
-/* ✅ INDEXES (important for performance + safety) */
-UserSchema.index({ username: 1 }, { unique: true });
-UserSchema.index({ email: 1 }, { unique: true });
 
 export default mongoose.model<IUser>("User", UserSchema);
