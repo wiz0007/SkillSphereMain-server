@@ -5,7 +5,7 @@ const resend = new Resend(process.env.RESEND_API_KEY);
 export const sendOTPEmail = async (to: string, otp: string) => {
   try {
     const response = await resend.emails.send({
-      from: "onboarding@resend.dev", // change after domain verify
+      from: "noreply@skillsphere.space", // change after domain verify
       to,
       subject: "Your OTP Code",
       html: `
