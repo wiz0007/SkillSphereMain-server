@@ -8,11 +8,11 @@ export interface IUser extends Document {
 
   isVerified: boolean;
 
-  otp?: string;
-  otpExpires?: Date;
+  otp?: string | null;
+  otpExpires?: Date | null;
 
   otpAttempts: number;
-  lockUntil?: Date;
+  lockUntil?: Date | null;
 }
 
 const UserSchema = new Schema<IUser>(

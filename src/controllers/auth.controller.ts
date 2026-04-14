@@ -167,10 +167,10 @@ export const verifyOTP: RequestHandler = async (req, res) => {
     }
 
     user.isVerified = true;
-    user.otp = undefined;
-    user.otpExpires = undefined;
+    user.otp = null;
+    user.otpExpires = null;
     user.otpAttempts = 0;
-    user.lockUntil = undefined;
+    user.lockUntil = null;
 
     await user.save();
 
