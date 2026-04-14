@@ -22,16 +22,22 @@ export interface IProfile extends Document {
 
   tutorProfile?: {
     headline: string;
+    bio: string;
+
     skills: string[];
     categories: string[];
+
     experience: number;
-    hourlyRate: number;
+    experienceDetails?: string;
+
+    education?: string;
+    portfolioLinks?: string[];
+
     languages: string[];
 
-    availability?: {
-      day: string;
-      slots: string[];
-    }[];
+    availability: boolean; // ✅ changed to boolean
+
+    teachingMode: "Online" | "Offline" | "Both";
 
     rating?: number;
     totalSessions?: number;
@@ -69,30 +75,55 @@ const ProfileSchema = new Schema<IProfile>(
     },
 
     tutorProfile: {
-      headline: String,
+      headline: { type: String, required: true },
+      bio: { type: String, required: true },
 
-      skills: [String], // 🔥 searchable
+      skills: {
+        type: [String],
+        default: [],
+      },
 
-      categories: [String], // 🔥 filterable
+      categories: {
+        type: [String],
+        default: [],
+      },
 
       experience: {
         type: Number,
         min: 0,
+        default: 0,
       },
 
-      hourlyRate: {
-        type: Number,
-        min: 0,
+      experienceDetails: {
+        type: String,
+        default: "",
       },
 
-      languages: [String],
+      education: {
+        type: String,
+        default: "",
+      },
 
-      availability: [
-        {
-          day: String,
-          slots: [String],
-        },
-      ],
+      portfolioLinks: {
+        type: [String],
+        default: [],
+      },
+
+      languages: {
+        type: [String],
+        default: [],
+      },
+
+      availability: {
+        type: Boolean,
+        required: true,
+      },
+
+      teachingMode: {
+        type: String,
+        enum: ["Online", "Offline", "Both"],
+        default: "Online",
+      },
 
       rating: {
         type: Number,
@@ -118,13 +149,11 @@ const ProfileSchema = new Schema<IProfile>(
 // 🔥 Fast filtering
 ProfileSchema.index({ "tutorProfile.skills": 1 });
 ProfileSchema.index({ "tutorProfile.categories": 1 });
-ProfileSchema.index({ "tutorProfile.hourlyRate": 1 });
 
-// 🔥 Optional text search (advanced)
+// 🔥 Text search
 ProfileSchema.index({
   "tutorProfile.skills": "text",
   "tutorProfile.categories": "text",
 });
 
 export default mongoose.model<IProfile>("Profile", ProfileSchema);
-

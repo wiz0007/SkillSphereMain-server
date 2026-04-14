@@ -78,11 +78,19 @@ export const getMyProfile: RequestHandler = async (req, res) => {
   }
 };
 
-/* ================= BECOME TUTOR ================= */
+/* ================= UTILITIES ================= */
+
+// Clean arrays: trim + remove empty
+const cleanArray = (arr: string[] = []) =>
+  arr.map((s) => s.trim()).filter(Boolean);
+
+/* =========================================================
+   ================= BECOME TUTOR ===========================
+   ========================================================= */
 
 export const becomeTutor: RequestHandler = async (req, res) => {
   try {
-    const userId = (req).userId;
+    const userId = (req as any).userId;
 
     if (!userId) {
       return res.status(401).json({ message: "Unauthorized" });
@@ -90,16 +98,69 @@ export const becomeTutor: RequestHandler = async (req, res) => {
 
     const objectId = new mongoose.Types.ObjectId(userId);
 
-    const { category, experience, hourlyRate } = req.body;
+    const {
+      headline,
+      bio,
+      skills,
+      categories,
+      experience,
+      experienceDetails,
+      education,
+      portfolioLinks,
+      languages,
+      availability,
+      teachingMode,
+    } = req.body;
+
+    /* ================= VALIDATION ================= */
+
+    if (!headline || !bio) {
+      return res.status(400).json({
+        message: "Headline and bio are required",
+      });
+    }
+
+    if (!Array.isArray(skills) || skills.length < 2) {
+      return res.status(400).json({
+        message: "At least 2 skills are required",
+      });
+    }
+
+    if (!Array.isArray(categories) || categories.length === 0) {
+      return res.status(400).json({
+        message: "At least 1 category is required",
+      });
+    }
+
+    if (typeof availability !== "boolean") {
+      return res.status(400).json({
+        message: "Availability must be true or false",
+      });
+    }
+
+    /* ================= UPDATE ================= */
 
     const profile = await Profile.findOneAndUpdate(
       { user: objectId },
       {
         isTutor: true,
         tutorProfile: {
-          category,
-          experience,
-          hourlyRate,
+          headline,
+          bio,
+
+          skills: cleanArray(skills),
+          categories: cleanArray(categories),
+
+          experience: Number(experience) || 0,
+          experienceDetails: experienceDetails || "",
+
+          education: education || "",
+          portfolioLinks: cleanArray(portfolioLinks),
+
+          languages: cleanArray(languages),
+
+          availability,
+          teachingMode: teachingMode || "Online",
         },
       },
       { new: true }
@@ -118,41 +179,19 @@ export const becomeTutor: RequestHandler = async (req, res) => {
 
   } catch (error) {
     console.error("BECOME TUTOR ERROR:", error);
-    return res.status(500).json({ message: "Failed to become tutor" });
-  }
-};
-
-/* ================= UPLOAD PHOTO ================= */
-
-export const uploadPhoto: RequestHandler = async (req, res) => {
-  try {
-    const userId = (req).userId;
-
-    if (!userId) {
-      return res.status(401).json({ message: "Unauthorized" });
-    }
-
-    if (!req.file) {
-      return res.status(400).json({ message: "No file uploaded" });
-    }
-
-    const result = await cloudinary.uploader.upload(req.file.path);
-
-    return res.json({
-      imageUrl: result.secure_url,
+    return res.status(500).json({
+      message: "Failed to become tutor",
     });
-
-  } catch (error) {
-    console.error("UPLOAD ERROR:", error);
-    return res.status(500).json({ message: "Upload failed" });
   }
 };
 
-/* ================= UPDATE PROFILE ================= */
+/* =========================================================
+   ================= UPDATE PROFILE =========================
+   ========================================================= */
 
 export const updateProfile: RequestHandler = async (req, res) => {
   try {
-    const userId = (req).userId;
+    const userId = (req as any).userId;
 
     if (!userId) {
       return res.status(401).json({ message: "Unauthorized" });
@@ -165,6 +204,8 @@ export const updateProfile: RequestHandler = async (req, res) => {
     if (!profile) {
       return res.status(404).json({ message: "Profile not found" });
     }
+
+    /* ================= BASIC PROFILE ================= */
 
     const allowedFields: (keyof IProfile)[] = [
       "fullName",
@@ -188,13 +229,48 @@ export const updateProfile: RequestHandler = async (req, res) => {
       }
     });
 
+    /* ================= TUTOR PROFILE ================= */
+
     if (req.body.tutorProfile) {
       const tp = req.body.tutorProfile;
 
-      profile.tutorProfile = {
-        ...profile.tutorProfile,
-        ...tp,
-      };
+      if (!profile.tutorProfile) {
+        profile.tutorProfile = {} as any;
+      }
+
+      const allowedTutorFields = [
+        "headline",
+        "bio",
+        "skills",
+        "categories",
+        "experience",
+        "experienceDetails",
+        "education",
+        "portfolioLinks",
+        "languages",
+        "availability",
+        "teachingMode",
+      ];
+
+      allowedTutorFields.forEach((field) => {
+        if (tp[field] !== undefined) {
+          if (
+            ["skills", "categories", "languages", "portfolioLinks"].includes(
+              field
+            )
+          ) {
+            (profile.tutorProfile as any)[field] = cleanArray(tp[field]);
+          } else if (field === "experience") {
+            (profile.tutorProfile as any)[field] =
+              Number(tp[field]) || 0;
+          } else if (field === "availability") {
+            (profile.tutorProfile as any)[field] =
+              Boolean(tp[field]);
+          } else {
+            (profile.tutorProfile as any)[field] = tp[field];
+          }
+        }
+      });
     }
 
     await profile.save();
@@ -208,6 +284,38 @@ export const updateProfile: RequestHandler = async (req, res) => {
 
   } catch (error) {
     console.error("UPDATE PROFILE ERROR:", error);
-    return res.status(500).json({ message: "Failed to update profile" });
+    return res.status(500).json({
+      message: "Failed to update profile",
+    });
+  }
+};
+
+/* =========================================================
+   ================= UPLOAD PHOTO ===========================
+   ========================================================= */
+
+export const uploadPhoto: RequestHandler = async (req, res) => {
+  try {
+    const userId = (req as any).userId;
+
+    if (!userId) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+
+    if (!req.file) {
+      return res.status(400).json({ message: "No file uploaded" });
+    }
+
+    const result = await cloudinary.uploader.upload(req.file.path);
+
+    return res.json({
+      imageUrl: result.secure_url,
+    });
+
+  } catch (error) {
+    console.error("UPLOAD ERROR:", error);
+    return res.status(500).json({
+      message: "Upload failed",
+    });
   }
 };
