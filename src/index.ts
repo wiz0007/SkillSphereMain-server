@@ -42,7 +42,7 @@ app.use(
     origin: [
       "http://localhost:5173",
       "https://skill-sphere-main-client-oh1p.vercel.app",
-      "http://skillsphere.space"
+      "https://skillsphere.space"
     ],
     credentials: true,
   })
