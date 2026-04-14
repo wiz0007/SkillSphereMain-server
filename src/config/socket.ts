@@ -11,6 +11,7 @@ export const initSocket = (server: http.Server) => {
       origin: [
       "http://localhost:5173",
       "https://skill-sphere-main-client-oh1p.vercel.app",
+      "https://skillsphere.space/"
     ],
     credentials: true,
     },
