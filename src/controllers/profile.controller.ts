@@ -81,8 +81,31 @@ export const getMyProfile: RequestHandler = async (req, res) => {
 /* ================= UTILITIES ================= */
 
 // Clean arrays: trim + remove empty
+
+/* =========================================================
+   ================= BECOME TUTOR ===========================
+   ========================================================= */
+
+
+
+/* ================= UTILITIES ================= */
+
+// Clean arrays safely
 const cleanArray = (arr: string[] = []) =>
   arr.map((s) => s.trim()).filter(Boolean);
+
+// Normalize teaching mode (fix enum issues)
+const normalizeMode = (mode: string) => {
+  if (!mode) return "Online";
+
+  const clean = mode.trim().toLowerCase();
+
+  if (clean === "online") return "Online";
+  if (clean === "offline") return "Offline";
+  if (clean === "both") return "Both";
+
+  return "Online";
+};
 
 /* =========================================================
    ================= BECOME TUTOR ===========================
@@ -143,31 +166,40 @@ export const becomeTutor: RequestHandler = async (req, res) => {
     const profile = await Profile.findOneAndUpdate(
       { user: objectId },
       {
-        isTutor: true,
-        tutorProfile: {
-          headline,
-          bio,
+        $set: {
+          isTutor: true,
 
-          skills: cleanArray(skills),
-          categories: cleanArray(categories),
+          "tutorProfile.headline": headline,
+          "tutorProfile.bio": bio,
 
-          experience: Number(experience) || 0,
-          experienceDetails: experienceDetails || "",
+          "tutorProfile.skills": cleanArray(skills),
+          "tutorProfile.categories": cleanArray(categories),
 
-          education: education || "",
-          portfolioLinks: cleanArray(portfolioLinks),
+          "tutorProfile.experience": Number(experience) || 0,
+          "tutorProfile.experienceDetails":
+            experienceDetails || "",
 
-          languages: cleanArray(languages),
+          "tutorProfile.education": education || "",
+          "tutorProfile.portfolioLinks":
+            cleanArray(portfolioLinks),
 
-          availability,
-          teachingMode: teachingMode || "Online",
+          "tutorProfile.languages": cleanArray(languages),
+
+          "tutorProfile.availability": availability,
+          "tutorProfile.teachingMode":
+            normalizeMode(teachingMode),
         },
       },
-      { new: true }
+      {
+        new: true,
+        runValidators: true,
+      }
     ).lean();
 
     if (!profile) {
-      return res.status(404).json({ message: "Profile not found" });
+      return res.status(404).json({
+        message: "Profile not found",
+      });
     }
 
     const user = await User.findById(objectId).lean();
@@ -177,10 +209,12 @@ export const becomeTutor: RequestHandler = async (req, res) => {
       ...profile,
     });
 
-  } catch (error) {
+  } catch (error: any) {
     console.error("BECOME TUTOR ERROR:", error);
+
     return res.status(500).json({
-      message: "Failed to become tutor",
+      message: error.message || "Failed to become tutor",
+      errors: error?.errors || null,
     });
   }
 };
@@ -202,7 +236,9 @@ export const updateProfile: RequestHandler = async (req, res) => {
     const profile = await Profile.findOne({ user: objectId });
 
     if (!profile) {
-      return res.status(404).json({ message: "Profile not found" });
+      return res.status(404).json({
+        message: "Profile not found",
+      });
     }
 
     /* ================= BASIC PROFILE ================= */
@@ -255,19 +291,22 @@ export const updateProfile: RequestHandler = async (req, res) => {
       allowedTutorFields.forEach((field) => {
         if (tp[field] !== undefined) {
           if (
-            ["skills", "categories", "languages", "portfolioLinks"].includes(
-              field
-            )
+            ["skills", "categories", "languages", "portfolioLinks"].includes(field)
           ) {
-            (profile.tutorProfile as any)[field] = cleanArray(tp[field]);
+            (profile.tutorProfile as any)[field] =
+              cleanArray(tp[field]);
           } else if (field === "experience") {
             (profile.tutorProfile as any)[field] =
               Number(tp[field]) || 0;
           } else if (field === "availability") {
             (profile.tutorProfile as any)[field] =
               Boolean(tp[field]);
+          } else if (field === "teachingMode") {
+            (profile.tutorProfile as any)[field] =
+              normalizeMode(tp[field]);
           } else {
-            (profile.tutorProfile as any)[field] = tp[field];
+            (profile.tutorProfile as any)[field] =
+              tp[field];
           }
         }
       });
@@ -282,10 +321,12 @@ export const updateProfile: RequestHandler = async (req, res) => {
       ...profile.toObject(),
     });
 
-  } catch (error) {
+  } catch (error: any) {
     console.error("UPDATE PROFILE ERROR:", error);
+
     return res.status(500).json({
-      message: "Failed to update profile",
+      message: error.message || "Failed to update profile",
+      errors: error?.errors || null,
     });
   }
 };
@@ -303,19 +344,24 @@ export const uploadPhoto: RequestHandler = async (req, res) => {
     }
 
     if (!req.file) {
-      return res.status(400).json({ message: "No file uploaded" });
+      return res.status(400).json({
+        message: "No file uploaded",
+      });
     }
 
-    const result = await cloudinary.uploader.upload(req.file.path);
+    const result = await cloudinary.uploader.upload(
+      req.file.path
+    );
 
     return res.json({
       imageUrl: result.secure_url,
     });
 
-  } catch (error) {
+  } catch (error: any) {
     console.error("UPLOAD ERROR:", error);
+
     return res.status(500).json({
-      message: "Upload failed",
+      message: error.message || "Upload failed",
     });
   }
 };
