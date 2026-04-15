@@ -21,20 +21,23 @@ export const protect: RequestHandler = (req, res, next) => {
       });
     }
 
-    /* 🔐 VERIFY TOKEN */
     const decoded = jwt.verify(
       token,
       process.env.JWT_SECRET as string
     ) as JwtPayload;
 
-    if (!decoded || !decoded.id) {
+    console.log("DECODED TOKEN:", decoded); // debug
+
+    const userId =
+      decoded.id || decoded._id || decoded.userId;
+
+    if (!userId) {
       return res.status(401).json({
         message: "Invalid token payload",
       });
     }
 
-    /* ✅ NOW FULLY TYPED (NO CASTING NEEDED ANYWHERE) */
-    req.userId = decoded.id as string;
+    req.userId = userId as string;
 
     next();
 
