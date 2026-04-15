@@ -23,7 +23,6 @@ const router = express.Router();
 /* ================= PUBLIC ================= */
 
 router.get("/", getAllCourses);
-router.get("/:id", getCourseById); // ✅ FIXED (public)
 
 /* ================= PRIVATE ================= */
 
@@ -37,6 +36,9 @@ router.post(
 router.get("/my", protect, getMyCourses);
 
 router.get("/saved", protect, getSavedCourses);
+
+router.get("/:id", getCourseById); // ✅ FIXED (public)
+
 
 router.put(
   "/:id",
