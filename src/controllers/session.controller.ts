@@ -86,9 +86,8 @@ export const createSession: RequestHandler = async (req, res) => {
     }
 
     /* 💰 PRICE CALCULATION */
-    const price =
-      (tutorProfile.tutorProfile?.hourlyRate || 0) *
-      (duration / 60);
+    /* 💰 PRICE CALCULATION (FROM COURSE) */
+    const price = course.price || 0;
 
     const session = await Session.create({
       student: new mongoose.Types.ObjectId(userId),
