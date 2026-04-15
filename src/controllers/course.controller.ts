@@ -25,7 +25,7 @@ const normalizeCourseData = (body: any) => ({
   duration: body.duration?.trim(),
   level: body.level
     ? body.level.charAt(0).toUpperCase() +
-      body.level.slice(1).toLowerCase()
+    body.level.slice(1).toLowerCase()
     : "Beginner",
 });
 
@@ -41,7 +41,7 @@ export const createCourse: RequestHandler = async (req, res) => {
 
     const course = await Course.create({
       ...normalizeCourseData(req.body),
-      tutor: new mongoose.Types.ObjectId(userId),
+      tutor: userId
     });
 
     return res.status(201).json(course);
@@ -79,7 +79,7 @@ export const getMyCourses: RequestHandler = async (req, res) => {
     }
 
     const courses = await Course.find({
-      tutor: new mongoose.Types.ObjectId(userId),
+      tutor: userId
     });
 
     return res.json(courses);
@@ -132,7 +132,7 @@ export const updateCourse: RequestHandler = async (req, res) => {
     const course = await Course.findOneAndUpdate(
       {
         _id: id,
-        tutor: new mongoose.Types.ObjectId(userId),
+        tutor: userId
       },
       normalizeCourseData(req.body),
       { new: true }
