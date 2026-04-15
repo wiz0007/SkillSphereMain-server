@@ -231,8 +231,7 @@ export const updateProfile: RequestHandler = async (req, res) => {
       return res.status(401).json({ message: "Unauthorized" });
     }
 
-    const objectId = new mongoose.Types.ObjectId(userId);
-
+    const objectId = userId;
     const profile = await Profile.findOne({ user: objectId });
 
     if (!profile) {
