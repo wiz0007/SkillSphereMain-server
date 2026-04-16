@@ -11,7 +11,7 @@ import { protect } from "../middlewares/protect.js";
 import { upload } from "../middlewares/upload.js";
 import { validate } from "../middlewares/validate.js";
 
-import {createProfileSchema, updateProfileSchema} from "../validators/profile.validator.js";
+import {createProfileSchema, tutorSchema, updateProfileSchema} from "../validators/profile.validator.js";
 
 const router = express.Router();
 
@@ -38,7 +38,7 @@ router.post(
 router.post(
   "/become-tutor",
   protect,
-  validate(updateProfileSchema), // ✅ validation added
+  validate(tutorSchema), // ✅ validation added
   becomeTutor
 );
 
