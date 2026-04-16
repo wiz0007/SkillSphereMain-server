@@ -1,31 +1,69 @@
 import type { RequestHandler } from "express";
 import mongoose from "mongoose";
-import Profile, { type IProfile } from "../models/Profile.js";
+import Profile from "../models/Profile.js";
 import User from "../models/User.js";
-import cloudinary from "../config/cloudinary.js";
 
 /* ================= CREATE PROFILE ================= */
 
 export const createProfile: RequestHandler = async (req, res) => {
   try {
-    const userId = (req).userId;
+    const userId = (req as any).userId;
 
     if (!userId) {
-      return res.status(401).json({ message: "Unauthorized" });
+      return res.status(401).json({
+        message: "Unauthorized",
+      });
     }
 
     const objectId = new mongoose.Types.ObjectId(userId);
 
+    /* ================= CHECK EXISTING ================= */
+
     const existing = await Profile.findOne({ user: objectId });
+
     if (existing) {
-      return res.status(400).json({ message: "Profile already exists" });
+      return res.status(400).json({
+        message: "Profile already exists",
+      });
     }
+
+    /* ================= EXTRACT DATA ================= */
+
+    const {
+      fullName,
+      bio,
+      country,
+      state,
+      city,
+      phone,
+      preferredLanguage,
+      profilePhoto,
+      dob,
+      gender,
+      timezone,
+    } = req.body;
+
+    /* ================= CREATE PROFILE ================= */
 
     const profile = await Profile.create({
       user: objectId,
-      ...req.body, // ⚠️ keep as-is (your original logic)
+
+      fullName,
+      bio,
+      country,
+      state,
+      city,
+      phone,
+      preferredLanguage: preferredLanguage || "English",
+      profilePhoto: profilePhoto || "",
+      dob: dob || "",
+      gender: gender || "",
+      timezone: timezone || "",
+
       isTutor: false,
     });
+
+    /* ================= UPDATE USER ================= */
 
     const user = await User.findByIdAndUpdate(
       objectId,
@@ -34,20 +72,27 @@ export const createProfile: RequestHandler = async (req, res) => {
     ).lean();
 
     if (!user) {
-      return res.status(404).json({ message: "User not found" });
+      return res.status(404).json({
+        message: "User not found",
+      });
     }
+
+    /* ================= RESPONSE ================= */
 
     return res.status(201).json({
       ...user,
       ...profile.toObject(),
     });
 
-  } catch (error) {
+  } catch (error: any) {
     console.error("CREATE PROFILE ERROR:", error);
-    return res.status(500).json({ message: "Profile creation failed" });
+
+    return res.status(500).json({
+      message: error.message || "Profile creation failed",
+      errors: error?.errors || null,
+    });
   }
 };
-
 /* ================= GET PROFILE ================= */
 
 export const getMyProfile: RequestHandler = async (req, res) => {
