@@ -21,29 +21,99 @@ export interface IProfile extends Document {
   isTutor: boolean;
 
   tutorProfile?: {
-    headline: string;
-    bio: string;
+    headline?: string;
+    bio?: string;
 
-    skills: string[];
-    categories: string[];
+    skills?: string[];
+    categories?: string[];
 
-    experience: number;
+    experience?: number;
     experienceDetails?: string;
 
     education?: string;
     portfolioLinks?: string[];
 
-    languages: string[];
+    languages?: string[];
 
-    availability: boolean; // ✅ changed to boolean
+    availability?: boolean;
 
-    teachingMode: "Online" | "Offline" | "Both";
+    teachingMode?: "Online" | "Offline" | "Both";
 
     rating?: number;
     totalSessions?: number;
     isVerified?: boolean;
   };
 }
+
+const TutorProfileSchema = new Schema(
+  {
+    headline: String,
+    bio: String,
+
+    skills: {
+      type: [String],
+      default: [],
+    },
+
+    categories: {
+      type: [String],
+      default: [],
+    },
+
+    experience: {
+      type: Number,
+      min: 0,
+      default: 0,
+    },
+
+    experienceDetails: {
+      type: String,
+      default: "",
+    },
+
+    education: {
+      type: String,
+      default: "",
+    },
+
+    portfolioLinks: {
+      type: [String],
+      default: [],
+    },
+
+    languages: {
+      type: [String],
+      default: [],
+    },
+
+    availability: {
+      type: Boolean,
+      default: true,
+    },
+
+    teachingMode: {
+      type: String,
+      enum: ["Online", "Offline", "Both"],
+      default: "Online",
+    },
+
+    rating: {
+      type: Number,
+      default: 0,
+    },
+
+    totalSessions: {
+      type: Number,
+      default: 0,
+    },
+
+    isVerified: {
+      type: Boolean,
+      default: false,
+    },
+  },
+  { _id: false }
+);
 
 const ProfileSchema = new Schema<IProfile>(
   {
@@ -74,71 +144,10 @@ const ProfileSchema = new Schema<IProfile>(
       default: false,
     },
 
+    /* ✅ FIXED */
     tutorProfile: {
-      headline: { type: String, required: true },
-      bio: { type: String, required: true },
-
-      skills: {
-        type: [String],
-        default: [],
-      },
-
-      categories: {
-        type: [String],
-        default: [],
-      },
-
-      experience: {
-        type: Number,
-        min: 0,
-        default: 0,
-      },
-
-      experienceDetails: {
-        type: String,
-        default: "",
-      },
-
-      education: {
-        type: String,
-        default: "",
-      },
-
-      portfolioLinks: {
-        type: [String],
-        default: [],
-      },
-
-      languages: {
-        type: [String],
-        default: [],
-      },
-
-      availability: {
-        type: Boolean,
-        required: true,
-      },
-
-      teachingMode: {
-        type: String,
-        enum: ["Online", "Offline", "Both"],
-        default: "Online",
-      },
-
-      rating: {
-        type: Number,
-        default: 0,
-      },
-
-      totalSessions: {
-        type: Number,
-        default: 0,
-      },
-
-      isVerified: {
-        type: Boolean,
-        default: false,
-      },
+      type: TutorProfileSchema,
+      default: undefined, // 🔥 CRITICAL FIX
     },
   },
   { timestamps: true }
@@ -146,11 +155,9 @@ const ProfileSchema = new Schema<IProfile>(
 
 /* ================= INDEXING ================= */
 
-// 🔥 Fast filtering
 ProfileSchema.index({ "tutorProfile.skills": 1 });
 ProfileSchema.index({ "tutorProfile.categories": 1 });
 
-// 🔥 Text search
 ProfileSchema.index({
   "tutorProfile.skills": "text",
   "tutorProfile.categories": "text",
