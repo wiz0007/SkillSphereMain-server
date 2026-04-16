@@ -5,6 +5,7 @@ import {
   uploadPhoto,
   becomeTutor,
   updateProfile,
+  getPublicProfile
 } from "../controllers/profile.controller.js";
 
 import { protect } from "../middlewares/protect.js";
@@ -50,6 +51,5 @@ router.put(
   updateProfile
 );
 
-router.get("/:userId", getPublicProfile);
-
+router.get("/public/:userId", getPublicProfile);
 export default router;
