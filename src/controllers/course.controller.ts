@@ -1,4 +1,5 @@
 import Course from "../models/Course.js";
+import Profile from "../models/Profile.js";
 import type { RequestHandler } from "express";
 import mongoose from "mongoose";
 
@@ -33,6 +34,38 @@ const normalizeCourseData = (body: any) => ({
     : "Beginner",
 });
 
+/* ================= PROFILE MERGE ================= */
+
+const attachProfileToCourses = async (courses: any[]) => {
+  const userIds = courses
+    .map((c) => c.tutor?._id)
+    .filter(Boolean);
+
+  const profiles = await Profile.find({
+    user: { $in: userIds },
+  })
+    .select("user profilePhoto")
+    .lean();
+
+  const profileMap = new Map(
+    profiles.map((p) => [p.user.toString(), p])
+  );
+
+  return courses.map((course) => {
+    const profile = profileMap.get(
+      course.tutor?._id?.toString()
+    );
+
+    return {
+      ...course,
+      tutor: {
+        ...course.tutor,
+        profilePhoto: profile?.profilePhoto || null,
+      },
+    };
+  });
+};
+
 /* ================= CREATE ================= */
 
 export const createCourse: RequestHandler = async (req, res) => {
@@ -62,10 +95,13 @@ export const createCourse: RequestHandler = async (req, res) => {
 export const getAllCourses: RequestHandler = async (req, res) => {
   try {
     const courses = await Course.find()
-      .populate("tutor", "fullName profilePhoto")
-      .sort({ createdAt: -1 });
+      .populate("tutor", "username")
+      .sort({ createdAt: -1 })
+      .lean();
 
-    return res.json(courses);
+    const finalCourses = await attachProfileToCourses(courses);
+
+    return res.json(finalCourses);
   } catch (err: any) {
     console.error("GET ALL ERROR:", err);
     return res.status(500).json({
@@ -84,11 +120,14 @@ export const getMyCourses: RequestHandler = async (req, res) => {
       return res.status(401).json({ message: "Unauthorized" });
     }
 
-    const courses = await Course.find({
-      tutor: userId,
-    }).sort({ createdAt: -1 });
+    const courses = await Course.find({ tutor: userId })
+      .populate("tutor", "username")
+      .sort({ createdAt: -1 })
+      .lean();
 
-    return res.json(courses);
+    const finalCourses = await attachProfileToCourses(courses);
+
+    return res.json(finalCourses);
   } catch (err: any) {
     console.error("GET MY ERROR:", err);
     return res.status(500).json({
@@ -107,16 +146,17 @@ export const getCourseById: RequestHandler = async (req, res) => {
       return res.status(400).json({ message: "Invalid ID" });
     }
 
-    const course = await Course.findById(id).populate(
-      "tutor",
-      "fullName profilePhoto"
-    );
+    const course = await Course.findById(id)
+      .populate("tutor", "username")
+      .lean();
 
     if (!course) {
       return res.status(404).json({ message: "Course not found" });
     }
 
-    return res.json(course);
+    const [finalCourse] = await attachProfileToCourses([course]);
+
+    return res.json(finalCourse);
   } catch (err: any) {
     console.error("GET ERROR:", err);
     return res.status(500).json({
@@ -381,9 +421,14 @@ export const getSavedCourses: RequestHandler = async (req, res) => {
 
     const courses = await Course.find({
       savedBy: userId,
-    }).sort({ createdAt: -1 });
+    })
+      .populate("tutor", "username")
+      .sort({ createdAt: -1 })
+      .lean();
 
-    return res.json(courses);
+    const finalCourses = await attachProfileToCourses(courses);
+
+    return res.json(finalCourses);
   } catch (err: any) {
     console.error("GET SAVED ERROR:", err);
     return res.status(500).json({
