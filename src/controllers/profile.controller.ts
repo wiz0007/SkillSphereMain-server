@@ -412,3 +412,58 @@ export const uploadPhoto: RequestHandler = async (req, res) => {
     });
   }
 };
+
+
+/* ================= PUBLIC PROFILE ================= */
+
+export const getPublicProfile: RequestHandler = async (req, res) => {
+  try {
+    let { userId } = req.params;
+
+    /* ================= FIX TYPE ================= */
+
+    if (!userId || Array.isArray(userId)) {
+      return res.status(400).json({
+        message: "Invalid userId",
+      });
+    }
+
+    /* ================= VALIDATE ================= */
+
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      return res.status(400).json({
+        message: "Invalid userId format",
+      });
+    }
+
+    const objectId = new mongoose.Types.ObjectId(userId);
+
+    /* ================= QUERY ================= */
+
+    const profile = await Profile.findOne({ user: objectId }).lean();
+
+    if (!profile) {
+      return res.status(404).json({
+        message: "Profile not found",
+      });
+    }
+
+    const user = await User.findById(objectId)
+      .select("username profileCompleted")
+      .lean();
+
+    /* ================= RESPONSE ================= */
+
+    return res.json({
+      username: user?.username,
+      ...profile,
+    });
+
+  } catch (error: any) {
+    console.error("GET PUBLIC PROFILE ERROR:", error);
+
+    return res.status(500).json({
+      message: "Failed to fetch profile",
+    });
+  }
+};

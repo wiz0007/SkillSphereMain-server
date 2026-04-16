@@ -50,4 +50,6 @@ router.put(
   updateProfile
 );
 
+router.get("/:userId", getPublicProfile);
+
 export default router;
