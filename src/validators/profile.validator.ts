@@ -15,6 +15,32 @@ export const tutorSchema = z.object({
   teachingMode: z.enum(["Online", "Offline", "Both"]).optional(),
 });
 
+export const createProfileSchema = z.object({
+  fullName: z.string().min(2).max(50),
+
+  bio: z.string().min(2).max(300),
+
+  country: z.string().min(2),
+  state: z.string().min(2),
+  city: z.string().min(2),
+
+  timezone: z.string().optional(),
+
+  phone: z
+    .string()
+    .min(8)
+    .max(15)
+    .regex(/^[0-9+]+$/, "Invalid phone"),
+
+  preferredLanguage: z.string().optional(),
+
+  profilePhoto: z.string().optional(),
+
+  dob: z.string().optional(),
+
+  gender: z.enum(["Male", "Female", "Other"]).optional(),
+});
+
 /* ================= UPDATE PROFILE ================= */
 export const updateProfileSchema = z.object({
   fullName: z.string().min(2).max(50).optional(),
