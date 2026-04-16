@@ -11,7 +11,7 @@ import { protect } from "../middlewares/protect.js";
 import { upload } from "../middlewares/upload.js";
 import { validate } from "../middlewares/validate.js";
 
-import {updateProfileSchema} from "../validators/profile.validator.js";
+import {createProfileSchema, updateProfileSchema} from "../validators/profile.validator.js";
 
 const router = express.Router();
 
@@ -19,7 +19,7 @@ const router = express.Router();
 router.post(
   "/",
   protect,
-  validate(updateProfileSchema), // ✅ validation added
+  validate(createProfileSchema), // ✅ validation added
   createProfile
 );
 
