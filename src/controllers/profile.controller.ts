@@ -1,7 +1,9 @@
 import type { RequestHandler } from "express";
 import mongoose from "mongoose";
-import Profile from "../models/Profile.js";
+import Profile, { type IProfile } from "../models/Profile.js";
 import User from "../models/User.js";
+import cloudinary from "../config/cloudinary.js";
+
 
 /* ================= CREATE PROFILE ================= */
 
@@ -93,6 +95,7 @@ export const createProfile: RequestHandler = async (req, res) => {
     });
   }
 };
+
 /* ================= GET PROFILE ================= */
 
 export const getMyProfile: RequestHandler = async (req, res) => {
