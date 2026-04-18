@@ -19,15 +19,13 @@ export const logActivity = async ({
   metadata = {},
 }: LogActivityParams) => {
   try {
-    if (!user) return;
-
-    let finalMessage = message || "New activity";
+    if (!user) return null;
 
     const activityData: any = {
       user: new mongoose.Types.ObjectId(user),
       type,
       action,
-      message: finalMessage,
+      message: message || "New activity",
       metadata,
       isRead: false,
     };
@@ -36,8 +34,13 @@ export const logActivity = async ({
       activityData.entityId = new mongoose.Types.ObjectId(entityId);
     }
 
-    await Activity.create(activityData);
+    /* 🔥 RETURN THIS */
+    const activity = await Activity.create(activityData);
+
+    return activity;
+
   } catch (err) {
     console.error("ACTIVITY LOG ERROR:", err);
+    return null;
   }
 };
