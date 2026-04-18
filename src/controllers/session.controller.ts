@@ -85,8 +85,7 @@ export const createSession: RequestHandler = async (req, res) => {
       });
     }
 
-    /* 💰 PRICE CALCULATION */
-    /* 💰 PRICE CALCULATION (FROM COURSE) */
+    /* 💰 PRICE FROM COURSE */
     const price = course.price || 0;
 
     const session = await Session.create({
@@ -100,10 +99,10 @@ export const createSession: RequestHandler = async (req, res) => {
       status: "pending",
     });
 
-    /* 🔔 NOTIFICATION */
+    /* 🔔 CREATE NOTIFICATION */
     const msg = `A student requested "${course.title}"`;
 
-    await logActivity({
+    const notification = await logActivity({
       user: tutorId.toString(),
       type: "SESSION",
       action: "REQUESTED",
@@ -112,11 +111,8 @@ export const createSession: RequestHandler = async (req, res) => {
       metadata: { courseId, date },
     });
 
-    emitNotification(tutorId.toString(), {
-      action: "REQUESTED",
-      message: msg,
-      sessionId: session._id,
-    });
+    /* 🔥 REAL-TIME */
+    emitNotification(tutorId.toString(), notification);
 
     return res.status(201).json(session);
 
@@ -141,8 +137,8 @@ export const getMySessions: RequestHandler = async (req, res) => {
     const sessions = await Session.find({
       $or: [{ student: userObjectId }, { tutor: userObjectId }],
     })
-      .populate("student", "name email")
-      .populate("tutor", "name email")
+      .populate("student", "username email")
+      .populate("tutor", "username email")
       .sort({ date: -1 });
 
     return res.json(sessions);
@@ -192,15 +188,15 @@ export const updateSessionStatus: RequestHandler = async (req, res) => {
     session.status = status;
     await session.save();
 
-    const msgMap: Record<typeof status, string> = {
+    const msgMap = {
       accepted: "Session accepted ✅",
       cancelled: "Session rejected ❌",
       completed: "Session completed 🎉",
     };
 
-    const message = msgMap[status] || "Session updated";
+    const message = msgMap[status];
 
-    await logActivity({
+    const notification = await logActivity({
       user: session.student.toString(),
       type: "SESSION",
       action: status.toUpperCase(),
@@ -208,11 +204,8 @@ export const updateSessionStatus: RequestHandler = async (req, res) => {
       message,
     });
 
-    emitNotification(session.student.toString(), {
-      action: status.toUpperCase(),
-      message,
-      sessionId: session._id,
-    });
+    /* 🔥 REAL-TIME */
+    emitNotification(session.student.toString(), notification);
 
     return res.json(session);
 
