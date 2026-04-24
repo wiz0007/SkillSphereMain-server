@@ -4,8 +4,34 @@ import Profile, { type IProfile } from "../models/Profile.js";
 import User from "../models/User.js";
 import cloudinary from "../config/cloudinary.js";
 
+const toSafeUser = (user: Record<string, any>) => {
+  const {
+    password,
+    otp,
+    otpExpires,
+    otpAttempts,
+    lockUntil,
+    __v,
+    ...safeUser
+  } = user;
 
-/* ================= CREATE PROFILE ================= */
+  return safeUser;
+};
+
+const cleanArray = (arr: string[] = []) =>
+  arr.map((s) => s.trim()).filter(Boolean);
+
+const normalizeMode = (mode: string) => {
+  if (!mode) return "Online";
+
+  const clean = mode.trim().toLowerCase();
+
+  if (clean === "online") return "Online";
+  if (clean === "offline") return "Offline";
+  if (clean === "both") return "Both";
+
+  return "Online";
+};
 
 export const createProfile: RequestHandler = async (req, res) => {
   try {
@@ -18,9 +44,6 @@ export const createProfile: RequestHandler = async (req, res) => {
     }
 
     const objectId = new mongoose.Types.ObjectId(userId);
-
-    /* ================= CHECK EXISTING ================= */
-
     const existing = await Profile.findOne({ user: objectId });
 
     if (existing) {
@@ -28,8 +51,6 @@ export const createProfile: RequestHandler = async (req, res) => {
         message: "Profile already exists",
       });
     }
-
-    /* ================= EXTRACT DATA ================= */
 
     const {
       fullName,
@@ -45,11 +66,8 @@ export const createProfile: RequestHandler = async (req, res) => {
       timezone,
     } = req.body;
 
-    /* ================= CREATE PROFILE ================= */
-
     const profile = await Profile.create({
       user: objectId,
-
       fullName,
       bio,
       country,
@@ -61,11 +79,8 @@ export const createProfile: RequestHandler = async (req, res) => {
       dob: dob || "",
       gender: gender || "",
       timezone: timezone || "",
-
       isTutor: false,
     });
-
-    /* ================= UPDATE USER ================= */
 
     const user = await User.findByIdAndUpdate(
       objectId,
@@ -79,10 +94,8 @@ export const createProfile: RequestHandler = async (req, res) => {
       });
     }
 
-    /* ================= RESPONSE ================= */
-
     return res.status(201).json({
-      ...user,
+      ...toSafeUser(user),
       ...profile.toObject(),
     });
 
@@ -96,18 +109,15 @@ export const createProfile: RequestHandler = async (req, res) => {
   }
 };
 
-/* ================= GET PROFILE ================= */
-
 export const getMyProfile: RequestHandler = async (req, res) => {
   try {
-    const userId = (req).userId;
+    const userId = req.userId;
 
     if (!userId) {
       return res.status(401).json({ message: "Unauthorized" });
     }
 
     const objectId = new mongoose.Types.ObjectId(userId);
-
     const profile = await Profile.findOne({ user: objectId }).lean();
     const user = await User.findById(objectId).lean();
 
@@ -116,7 +126,7 @@ export const getMyProfile: RequestHandler = async (req, res) => {
     }
 
     return res.json({
-      ...user,
+      ...toSafeUser(user),
       ...profile,
     });
 
@@ -125,39 +135,6 @@ export const getMyProfile: RequestHandler = async (req, res) => {
     return res.status(500).json({ message: "Failed to fetch profile" });
   }
 };
-
-/* ================= UTILITIES ================= */
-
-// Clean arrays: trim + remove empty
-
-/* =========================================================
-   ================= BECOME TUTOR ===========================
-   ========================================================= */
-
-
-
-/* ================= UTILITIES ================= */
-
-// Clean arrays safely
-const cleanArray = (arr: string[] = []) =>
-  arr.map((s) => s.trim()).filter(Boolean);
-
-// Normalize teaching mode (fix enum issues)
-const normalizeMode = (mode: string) => {
-  if (!mode) return "Online";
-
-  const clean = mode.trim().toLowerCase();
-
-  if (clean === "online") return "Online";
-  if (clean === "offline") return "Offline";
-  if (clean === "both") return "Both";
-
-  return "Online";
-};
-
-/* =========================================================
-   ================= BECOME TUTOR ===========================
-   ========================================================= */
 
 export const becomeTutor: RequestHandler = async (req, res) => {
   try {
@@ -183,8 +160,6 @@ export const becomeTutor: RequestHandler = async (req, res) => {
       teachingMode,
     } = req.body;
 
-    /* ================= VALIDATION ================= */
-
     if (!headline || !bio) {
       return res.status(400).json({
         message: "Headline and bio are required",
@@ -209,33 +184,22 @@ export const becomeTutor: RequestHandler = async (req, res) => {
       });
     }
 
-    /* ================= UPDATE ================= */
-
     const profile = await Profile.findOneAndUpdate(
       { user: objectId },
       {
         $set: {
           isTutor: true,
-
           "tutorProfile.headline": headline,
           "tutorProfile.bio": bio,
-
           "tutorProfile.skills": cleanArray(skills),
           "tutorProfile.categories": cleanArray(categories),
-
           "tutorProfile.experience": Number(experience) || 0,
-          "tutorProfile.experienceDetails":
-            experienceDetails || "",
-
+          "tutorProfile.experienceDetails": experienceDetails || "",
           "tutorProfile.education": education || "",
-          "tutorProfile.portfolioLinks":
-            cleanArray(portfolioLinks),
-
+          "tutorProfile.portfolioLinks": cleanArray(portfolioLinks),
           "tutorProfile.languages": cleanArray(languages),
-
           "tutorProfile.availability": availability,
-          "tutorProfile.teachingMode":
-            normalizeMode(teachingMode),
+          "tutorProfile.teachingMode": normalizeMode(teachingMode),
         },
       },
       {
@@ -252,8 +216,12 @@ export const becomeTutor: RequestHandler = async (req, res) => {
 
     const user = await User.findById(objectId).lean();
 
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
     return res.json({
-      ...user,
+      ...toSafeUser(user),
       ...profile,
     });
 
@@ -267,10 +235,6 @@ export const becomeTutor: RequestHandler = async (req, res) => {
   }
 };
 
-/* =========================================================
-   ================= UPDATE PROFILE =========================
-   ========================================================= */
-
 export const updateProfile: RequestHandler = async (req, res) => {
   try {
     const userId = (req as any).userId;
@@ -279,16 +243,13 @@ export const updateProfile: RequestHandler = async (req, res) => {
       return res.status(401).json({ message: "Unauthorized" });
     }
 
-    const objectId = userId;
-    const profile = await Profile.findOne({ user: objectId });
+    const profile = await Profile.findOne({ user: userId });
 
     if (!profile) {
       return res.status(404).json({
         message: "Profile not found",
       });
     }
-
-    /* ================= BASIC PROFILE ================= */
 
     const allowedFields: (keyof IProfile)[] = [
       "fullName",
@@ -311,8 +272,6 @@ export const updateProfile: RequestHandler = async (req, res) => {
         (profile as any)[field] = updates[field];
       }
     });
-
-    /* ================= TUTOR PROFILE ================= */
 
     if (req.body.tutorProfile) {
       const tp = req.body.tutorProfile;
@@ -340,20 +299,15 @@ export const updateProfile: RequestHandler = async (req, res) => {
           if (
             ["skills", "categories", "languages", "portfolioLinks"].includes(field)
           ) {
-            (profile.tutorProfile as any)[field] =
-              cleanArray(tp[field]);
+            (profile.tutorProfile as any)[field] = cleanArray(tp[field]);
           } else if (field === "experience") {
-            (profile.tutorProfile as any)[field] =
-              Number(tp[field]) || 0;
+            (profile.tutorProfile as any)[field] = Number(tp[field]) || 0;
           } else if (field === "availability") {
-            (profile.tutorProfile as any)[field] =
-              Boolean(tp[field]);
+            (profile.tutorProfile as any)[field] = Boolean(tp[field]);
           } else if (field === "teachingMode") {
-            (profile.tutorProfile as any)[field] =
-              normalizeMode(tp[field]);
+            (profile.tutorProfile as any)[field] = normalizeMode(tp[field]);
           } else {
-            (profile.tutorProfile as any)[field] =
-              tp[field];
+            (profile.tutorProfile as any)[field] = tp[field];
           }
         }
       });
@@ -361,10 +315,14 @@ export const updateProfile: RequestHandler = async (req, res) => {
 
     await profile.save();
 
-    const user = await User.findById(objectId).lean();
+    const user = await User.findById(userId).lean();
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
 
     return res.json({
-      ...user,
+      ...toSafeUser(user),
       ...profile.toObject(),
     });
 
@@ -377,10 +335,6 @@ export const updateProfile: RequestHandler = async (req, res) => {
     });
   }
 };
-
-/* =========================================================
-   ================= UPLOAD PHOTO ===========================
-   ========================================================= */
 
 export const uploadPhoto: RequestHandler = async (req, res) => {
   try {
@@ -396,9 +350,7 @@ export const uploadPhoto: RequestHandler = async (req, res) => {
       });
     }
 
-    const result = await cloudinary.uploader.upload(
-      req.file.path
-    );
+    const result = await cloudinary.uploader.upload(req.file.path);
 
     return res.json({
       imageUrl: result.secure_url,
@@ -413,22 +365,15 @@ export const uploadPhoto: RequestHandler = async (req, res) => {
   }
 };
 
-
-/* ================= PUBLIC PROFILE ================= */
-
 export const getPublicProfile: RequestHandler = async (req, res) => {
   try {
-    let { userId } = req.params;
-
-    /* ================= FIX TYPE ================= */
+    const { userId } = req.params;
 
     if (!userId || Array.isArray(userId)) {
       return res.status(400).json({
         message: "Invalid userId",
       });
     }
-
-    /* ================= VALIDATE ================= */
 
     if (!mongoose.Types.ObjectId.isValid(userId)) {
       return res.status(400).json({
@@ -437,9 +382,6 @@ export const getPublicProfile: RequestHandler = async (req, res) => {
     }
 
     const objectId = new mongoose.Types.ObjectId(userId);
-
-    /* ================= QUERY ================= */
-
     const profile = await Profile.findOne({ user: objectId }).lean();
 
     if (!profile) {
@@ -451,8 +393,6 @@ export const getPublicProfile: RequestHandler = async (req, res) => {
     const user = await User.findById(objectId)
       .select("username profileCompleted")
       .lean();
-
-    /* ================= RESPONSE ================= */
 
     return res.json({
       username: user?.username,
