@@ -34,6 +34,35 @@ const normalizeCourseData = (body: any) => ({
     : "Beginner",
 });
 
+const syncCourseRatings = (
+  course: InstanceType<typeof Course>,
+  userId: string,
+  rating: number
+) => {
+  const userObjectId = new mongoose.Types.ObjectId(userId);
+
+  const existing = course.ratings.find(
+    (entry) => entry.user.toString() === userObjectId.toString()
+  );
+
+  if (existing) {
+    existing.value = rating;
+  } else {
+    course.ratings.push({
+      user: userObjectId,
+      value: rating,
+    });
+  }
+
+  const total = course.ratings.length;
+  const sum = course.ratings.reduce((acc, entry) => acc + entry.value, 0);
+
+  course.averageRating = total
+    ? Number((sum / total).toFixed(1))
+    : 0;
+  course.totalRatings = total;
+};
+
 /* ================= PROFILE MERGE ================= */
 
 const attachProfileToCourses = async (courses: any[]) => {
@@ -253,26 +282,7 @@ export const rateCourse: RequestHandler = async (req, res) => {
     const course = await Course.findById(id);
     if (!course) return res.status(404).json({ message: "Not found" });
 
-    const userObjectId = new mongoose.Types.ObjectId(userId);
-
-    const existing = course.ratings.find(
-      (r) => r.user.toString() === userObjectId.toString()
-    );
-
-    if (existing) {
-      existing.value = value;
-    } else {
-      course.ratings.push({
-        user: userObjectId,
-        value,
-      });
-    }
-
-    const total = course.ratings.length;
-    const sum = course.ratings.reduce((a, r) => a + r.value, 0);
-
-    course.averageRating = Number((sum / total).toFixed(1));
-    course.totalRatings = total;
+    syncCourseRatings(course, userId, value);
 
     await course.save();
 
@@ -322,9 +332,16 @@ export const addReview: RequestHandler = async (req, res) => {
       });
     }
 
+    syncCourseRatings(course, userId, rating);
+
     await course.save();
 
-    return res.json(course.reviews);
+    return res.json({
+      reviews: course.reviews,
+      ratings: course.ratings,
+      averageRating: course.averageRating,
+      totalRatings: course.totalRatings,
+    });
   } catch (err: any) {
     console.error("REVIEW ERROR:", err);
     return res.status(500).json({

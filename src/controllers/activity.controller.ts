@@ -24,7 +24,7 @@ export const getNotifications: RequestHandler = async (req, res) => {
     }
 
     const notifications = await Activity.find({
-      user: new mongoose.Types.ObjectId(userId),
+      user: userId
     }).sort({ createdAt: -1 });
 
     return res.json(notifications);
@@ -48,7 +48,7 @@ export const getUnreadCount: RequestHandler = async (req, res) => {
     }
 
     const count = await Activity.countDocuments({
-      user: new mongoose.Types.ObjectId(userId),
+      user: userId,
       isRead: false,
     });
 

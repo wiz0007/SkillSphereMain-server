@@ -12,13 +12,33 @@ const generateToken = (id: string) => {
   });
 };
 
+const toSafeUser = (
+  user: Record<string, any>,
+  profile?: {
+    isTutor?: boolean | undefined;
+    profilePhoto?: string | undefined;
+  }
+) => {
+  const {
+    password,
+    otp,
+    otpExpires,
+    otpAttempts,
+    lockUntil,
+    __v,
+    ...safeUser
+  } = user;
 
+  return {
+    ...safeUser,
+    isTutor: profile?.isTutor || false,
+    profilePhoto: profile?.profilePhoto || "",
+  };
+};
 
 export const register: RequestHandler = async (req, res) => {
   try {
     const { username, email, password } = req.body;
-
-    /* ================= VALIDATION ================= */
 
     if (!username || !email || !password) {
       return res.status(400).json({ message: "All fields required" });
@@ -31,8 +51,6 @@ export const register: RequestHandler = async (req, res) => {
       return res.status(400).json({ message: "Weak password" });
     }
 
-    /* ================= UNIQUE CHECK ================= */
-
     if (await User.findOne({ email })) {
       return res.status(400).json({ message: "Email already exists" });
     }
@@ -40,8 +58,6 @@ export const register: RequestHandler = async (req, res) => {
     if (await User.findOne({ username })) {
       return res.status(400).json({ message: "Username taken" });
     }
-
-    /* ================= CREATE USER ================= */
 
     const hashedPassword = await bcrypt.hash(password, 10);
     const otp = generateOTP();
@@ -55,8 +71,6 @@ export const register: RequestHandler = async (req, res) => {
       otpAttempts: 0,
     });
 
-    /* ================= EMAIL (NON-BLOCKING) ================= */
-
     sendOTPEmail(email, otp)
       .then(() => {
         console.log("OTP email sent to:", email);
@@ -64,8 +78,6 @@ export const register: RequestHandler = async (req, res) => {
       .catch((err) => {
         console.error("EMAIL FAILED:", err.message);
       });
-
-    /* ================= RESPONSE ================= */
 
     return res.status(201).json({
       message: "Account created. OTP sent to email.",
@@ -80,8 +92,6 @@ export const register: RequestHandler = async (req, res) => {
     });
   }
 };
-
-/* ================= LOGIN ================= */
 
 export const login: RequestHandler = async (req, res) => {
   try {
@@ -99,7 +109,6 @@ export const login: RequestHandler = async (req, res) => {
       });
     }
 
-    /* 🔒 ACCOUNT LOCK CHECK (MISSING BEFORE — FIXED) */
     if (user.lockUntil && user.lockUntil > new Date()) {
       return res.status(403).json({
         message: "Account temporarily locked. Try later.",
@@ -116,11 +125,10 @@ export const login: RequestHandler = async (req, res) => {
 
     return res.json({
       token: generateToken(user._id.toString()),
-      user: {
-        ...user.toObject(),
-        isTutor: profile?.isTutor || false,
-        profilePhoto: profile?.profilePhoto || "",
-      },
+      user: toSafeUser(user.toObject(), {
+        isTutor: profile?.isTutor,
+        profilePhoto: profile?.profilePhoto,
+      }),
     });
 
   } catch (error: any) {
@@ -128,8 +136,6 @@ export const login: RequestHandler = async (req, res) => {
     return res.status(500).json({ message: "Login failed" });
   }
 };
-
-/* ================= VERIFY OTP ================= */
 
 export const verifyOTP: RequestHandler = async (req, res) => {
   try {
@@ -176,12 +182,10 @@ export const verifyOTP: RequestHandler = async (req, res) => {
 
     return res.json({ message: "Verified successfully" });
 
-  } catch (err) {
+  } catch {
     return res.status(500).json({ message: "Verification failed" });
   }
 };
-
-/* ================= RESEND OTP ================= */
 
 export const resendOTP: RequestHandler = async (req, res) => {
   try {
@@ -215,8 +219,6 @@ export const resendOTP: RequestHandler = async (req, res) => {
     return res.status(500).json({ message: "Failed to resend OTP" });
   }
 };
-
-/* ================= USERNAME CHECK ================= */
 
 export const checkUsername: RequestHandler = async (req, res) => {
   try {
