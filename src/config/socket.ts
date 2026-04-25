@@ -50,3 +50,13 @@ export const emitNotification = (userId: string, payload: any) => {
     console.log("❌ User not connected:", userId);
   }
 };
+
+export const emitChatMessage = (userId: string, payload: any) => {
+  if (!io) return;
+
+  const socketId = users.get(userId.toString());
+
+  if (socketId) {
+    io.to(socketId).emit("chat:message", payload);
+  }
+};
