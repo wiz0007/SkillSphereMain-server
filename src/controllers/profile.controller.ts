@@ -33,23 +33,24 @@ const normalizeMode = (mode: string) => {
   return "Online";
 };
 
+const mergeUserAndProfile = (user: Record<string, any>, profile: Record<string, any>) => ({
+  ...toSafeUser(user),
+  ...profile,
+});
+
 export const createProfile: RequestHandler = async (req, res) => {
   try {
-    const userId = (req as any).userId;
+    const userId = req.userId;
 
     if (!userId) {
-      return res.status(401).json({
-        message: "Unauthorized",
-      });
+      return res.status(401).json({ message: "Unauthorized" });
     }
 
     const objectId = new mongoose.Types.ObjectId(userId);
     const existing = await Profile.findOne({ user: objectId });
 
     if (existing) {
-      return res.status(400).json({
-        message: "Profile already exists",
-      });
+      return res.status(400).json({ message: "Profile already exists" });
     }
 
     const {
@@ -89,16 +90,10 @@ export const createProfile: RequestHandler = async (req, res) => {
     ).lean();
 
     if (!user) {
-      return res.status(404).json({
-        message: "User not found",
-      });
+      return res.status(404).json({ message: "User not found" });
     }
 
-    return res.status(201).json({
-      ...toSafeUser(user),
-      ...profile.toObject(),
-    });
-
+    return res.status(201).json(mergeUserAndProfile(user, profile.toObject()));
   } catch (error: any) {
     console.error("CREATE PROFILE ERROR:", error);
 
@@ -125,11 +120,7 @@ export const getMyProfile: RequestHandler = async (req, res) => {
       return res.status(404).json({ message: "Profile not found" });
     }
 
-    return res.json({
-      ...toSafeUser(user),
-      ...profile,
-    });
-
+    return res.json(mergeUserAndProfile(user, profile));
   } catch (error) {
     console.error("GET PROFILE ERROR:", error);
     return res.status(500).json({ message: "Failed to fetch profile" });
@@ -138,7 +129,7 @@ export const getMyProfile: RequestHandler = async (req, res) => {
 
 export const becomeTutor: RequestHandler = async (req, res) => {
   try {
-    const userId = (req as any).userId;
+    const userId = req.userId;
 
     if (!userId) {
       return res.status(401).json({ message: "Unauthorized" });
@@ -209,9 +200,7 @@ export const becomeTutor: RequestHandler = async (req, res) => {
     ).lean();
 
     if (!profile) {
-      return res.status(404).json({
-        message: "Profile not found",
-      });
+      return res.status(404).json({ message: "Profile not found" });
     }
 
     const user = await User.findById(objectId).lean();
@@ -220,11 +209,7 @@ export const becomeTutor: RequestHandler = async (req, res) => {
       return res.status(404).json({ message: "User not found" });
     }
 
-    return res.json({
-      ...toSafeUser(user),
-      ...profile,
-    });
-
+    return res.json(mergeUserAndProfile(user, profile));
   } catch (error: any) {
     console.error("BECOME TUTOR ERROR:", error);
 
@@ -237,15 +222,16 @@ export const becomeTutor: RequestHandler = async (req, res) => {
 
 export const updateProfile: RequestHandler = async (req, res) => {
   try {
-    const userId = (req as any).userId;
+    const userId = req.userId;
 
     if (!userId) {
       return res.status(401).json({ message: "Unauthorized" });
     }
 
     const profile = await Profile.findOne({ user: userId });
+    const user = await User.findById(userId);
 
-    if (!profile) {
+    if (!profile || !user) {
       return res.status(404).json({
         message: "Profile not found",
       });
@@ -265,13 +251,54 @@ export const updateProfile: RequestHandler = async (req, res) => {
       "gender",
     ];
 
-    const updates = req.body as Partial<IProfile>;
+    const updates = req.body as Partial<IProfile> & {
+      username?: string;
+      settings?: {
+        theme?: "dark" | "light";
+        notifications?: {
+          sessionUpdates?: boolean;
+          courseRecommendations?: boolean;
+          marketingEmails?: boolean;
+        };
+      };
+    };
 
     allowedFields.forEach((field) => {
       if (updates[field] !== undefined) {
         (profile as any)[field] = updates[field];
       }
     });
+
+    if (updates.username !== undefined) {
+      const normalizedUsername = updates.username.trim().toLowerCase();
+
+      if (normalizedUsername !== user.username) {
+        const existingUser = await User.findOne({
+          username: normalizedUsername,
+          _id: { $ne: user._id },
+        });
+
+        if (existingUser) {
+          return res.status(409).json({
+            message: "Username taken",
+          });
+        }
+      }
+
+      user.username = normalizedUsername;
+    }
+
+    if (updates.settings) {
+      const existingSettings = profile.settings || {};
+      profile.settings = {
+        ...existingSettings,
+        ...updates.settings,
+        notifications: {
+          ...(existingSettings.notifications || {}),
+          ...(updates.settings.notifications || {}),
+        },
+      };
+    }
 
     if (req.body.tutorProfile) {
       const tp = req.body.tutorProfile;
@@ -313,19 +340,11 @@ export const updateProfile: RequestHandler = async (req, res) => {
       });
     }
 
-    await profile.save();
+    await Promise.all([profile.save(), user.save()]);
 
-    const user = await User.findById(userId).lean();
-
-    if (!user) {
-      return res.status(404).json({ message: "User not found" });
-    }
-
-    return res.json({
-      ...toSafeUser(user),
-      ...profile.toObject(),
-    });
-
+    return res.json(
+      mergeUserAndProfile(user.toObject(), profile.toObject())
+    );
   } catch (error: any) {
     console.error("UPDATE PROFILE ERROR:", error);
 
@@ -338,7 +357,7 @@ export const updateProfile: RequestHandler = async (req, res) => {
 
 export const uploadPhoto: RequestHandler = async (req, res) => {
   try {
-    const userId = (req as any).userId;
+    const userId = req.userId;
 
     if (!userId) {
       return res.status(401).json({ message: "Unauthorized" });
@@ -355,7 +374,6 @@ export const uploadPhoto: RequestHandler = async (req, res) => {
     return res.json({
       imageUrl: result.secure_url,
     });
-
   } catch (error: any) {
     console.error("UPLOAD ERROR:", error);
 
@@ -398,7 +416,6 @@ export const getPublicProfile: RequestHandler = async (req, res) => {
       username: user?.username,
       ...profile,
     });
-
   } catch (error: any) {
     console.error("GET PUBLIC PROFILE ERROR:", error);
 

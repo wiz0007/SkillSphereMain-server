@@ -13,6 +13,7 @@ import profileRoutes from "./routes/profile.routes.js";
 import sessionRoutes from "./routes/session.routes.js";
 import activityRoutes from "./routes/activity.routes.js";
 import courseRoutes from "./routes/course.routes.js";
+import messageRoutes from "./routes/message.routes.js";
 
 import { configureCloudinary } from "./config/cloudinary.js";
 import { errorHandler } from "./middlewares/errorHandler.js";
@@ -61,6 +62,7 @@ app.use("/api/profile", profileRoutes);
 app.use("/api/sessions", sessionRoutes);
 app.use("/api/notifications", activityRoutes);
 app.use("/api/courses", courseRoutes);
+app.use("/api/messages", messageRoutes);
 
 /* ================= 404 HANDLER ================= */
 

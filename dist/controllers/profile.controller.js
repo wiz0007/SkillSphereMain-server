@@ -1,0 +1,315 @@
+import mongoose from "mongoose";
+import Profile, {} from "../models/Profile.js";
+import User from "../models/User.js";
+import cloudinary from "../config/cloudinary.js";
+const toSafeUser = (user) => {
+    const { password, otp, otpExpires, otpAttempts, lockUntil, __v, ...safeUser } = user;
+    return safeUser;
+};
+const cleanArray = (arr = []) => arr.map((s) => s.trim()).filter(Boolean);
+const normalizeMode = (mode) => {
+    if (!mode)
+        return "Online";
+    const clean = mode.trim().toLowerCase();
+    if (clean === "online")
+        return "Online";
+    if (clean === "offline")
+        return "Offline";
+    if (clean === "both")
+        return "Both";
+    return "Online";
+};
+const mergeUserAndProfile = (user, profile) => ({
+    ...toSafeUser(user),
+    ...profile,
+});
+export const createProfile = async (req, res) => {
+    try {
+        const userId = req.userId;
+        if (!userId) {
+            return res.status(401).json({ message: "Unauthorized" });
+        }
+        const objectId = new mongoose.Types.ObjectId(userId);
+        const existing = await Profile.findOne({ user: objectId });
+        if (existing) {
+            return res.status(400).json({ message: "Profile already exists" });
+        }
+        const { fullName, bio, country, state, city, phone, preferredLanguage, profilePhoto, dob, gender, timezone, } = req.body;
+        const profile = await Profile.create({
+            user: objectId,
+            fullName,
+            bio,
+            country,
+            state,
+            city,
+            phone,
+            preferredLanguage: preferredLanguage || "English",
+            profilePhoto: profilePhoto || "",
+            dob: dob || "",
+            gender: gender || "",
+            timezone: timezone || "",
+            isTutor: false,
+        });
+        const user = await User.findByIdAndUpdate(objectId, { profileCompleted: true }, { new: true }).lean();
+        if (!user) {
+            return res.status(404).json({ message: "User not found" });
+        }
+        return res.status(201).json(mergeUserAndProfile(user, profile.toObject()));
+    }
+    catch (error) {
+        console.error("CREATE PROFILE ERROR:", error);
+        return res.status(500).json({
+            message: error.message || "Profile creation failed",
+            errors: error?.errors || null,
+        });
+    }
+};
+export const getMyProfile = async (req, res) => {
+    try {
+        const userId = req.userId;
+        if (!userId) {
+            return res.status(401).json({ message: "Unauthorized" });
+        }
+        const objectId = new mongoose.Types.ObjectId(userId);
+        const profile = await Profile.findOne({ user: objectId }).lean();
+        const user = await User.findById(objectId).lean();
+        if (!profile || !user) {
+            return res.status(404).json({ message: "Profile not found" });
+        }
+        return res.json(mergeUserAndProfile(user, profile));
+    }
+    catch (error) {
+        console.error("GET PROFILE ERROR:", error);
+        return res.status(500).json({ message: "Failed to fetch profile" });
+    }
+};
+export const becomeTutor = async (req, res) => {
+    try {
+        const userId = req.userId;
+        if (!userId) {
+            return res.status(401).json({ message: "Unauthorized" });
+        }
+        const objectId = new mongoose.Types.ObjectId(userId);
+        const { headline, bio, skills, categories, experience, experienceDetails, education, portfolioLinks, languages, availability, teachingMode, } = req.body;
+        if (!headline || !bio) {
+            return res.status(400).json({
+                message: "Headline and bio are required",
+            });
+        }
+        if (!Array.isArray(skills) || skills.length < 2) {
+            return res.status(400).json({
+                message: "At least 2 skills are required",
+            });
+        }
+        if (!Array.isArray(categories) || categories.length === 0) {
+            return res.status(400).json({
+                message: "At least 1 category is required",
+            });
+        }
+        if (typeof availability !== "boolean") {
+            return res.status(400).json({
+                message: "Availability must be true or false",
+            });
+        }
+        const profile = await Profile.findOneAndUpdate({ user: objectId }, {
+            $set: {
+                isTutor: true,
+                "tutorProfile.headline": headline,
+                "tutorProfile.bio": bio,
+                "tutorProfile.skills": cleanArray(skills),
+                "tutorProfile.categories": cleanArray(categories),
+                "tutorProfile.experience": Number(experience) || 0,
+                "tutorProfile.experienceDetails": experienceDetails || "",
+                "tutorProfile.education": education || "",
+                "tutorProfile.portfolioLinks": cleanArray(portfolioLinks),
+                "tutorProfile.languages": cleanArray(languages),
+                "tutorProfile.availability": availability,
+                "tutorProfile.teachingMode": normalizeMode(teachingMode),
+            },
+        }, {
+            new: true,
+            runValidators: true,
+        }).lean();
+        if (!profile) {
+            return res.status(404).json({ message: "Profile not found" });
+        }
+        const user = await User.findById(objectId).lean();
+        if (!user) {
+            return res.status(404).json({ message: "User not found" });
+        }
+        return res.json(mergeUserAndProfile(user, profile));
+    }
+    catch (error) {
+        console.error("BECOME TUTOR ERROR:", error);
+        return res.status(500).json({
+            message: error.message || "Failed to become tutor",
+            errors: error?.errors || null,
+        });
+    }
+};
+export const updateProfile = async (req, res) => {
+    try {
+        const userId = req.userId;
+        if (!userId) {
+            return res.status(401).json({ message: "Unauthorized" });
+        }
+        const profile = await Profile.findOne({ user: userId });
+        const user = await User.findById(userId);
+        if (!profile || !user) {
+            return res.status(404).json({
+                message: "Profile not found",
+            });
+        }
+        const allowedFields = [
+            "fullName",
+            "bio",
+            "country",
+            "state",
+            "city",
+            "timezone",
+            "phone",
+            "preferredLanguage",
+            "profilePhoto",
+            "dob",
+            "gender",
+        ];
+        const updates = req.body;
+        allowedFields.forEach((field) => {
+            if (updates[field] !== undefined) {
+                profile[field] = updates[field];
+            }
+        });
+        if (updates.username !== undefined) {
+            const normalizedUsername = updates.username.trim().toLowerCase();
+            if (normalizedUsername !== user.username) {
+                const existingUser = await User.findOne({
+                    username: normalizedUsername,
+                    _id: { $ne: user._id },
+                });
+                if (existingUser) {
+                    return res.status(409).json({
+                        message: "Username taken",
+                    });
+                }
+            }
+            user.username = normalizedUsername;
+        }
+        if (updates.settings) {
+            const existingSettings = profile.settings || {};
+            profile.settings = {
+                ...existingSettings,
+                ...updates.settings,
+                notifications: {
+                    ...(existingSettings.notifications || {}),
+                    ...(updates.settings.notifications || {}),
+                },
+            };
+        }
+        if (req.body.tutorProfile) {
+            const tp = req.body.tutorProfile;
+            if (!profile.tutorProfile) {
+                profile.tutorProfile = {};
+            }
+            const allowedTutorFields = [
+                "headline",
+                "bio",
+                "skills",
+                "categories",
+                "experience",
+                "experienceDetails",
+                "education",
+                "portfolioLinks",
+                "languages",
+                "availability",
+                "teachingMode",
+            ];
+            allowedTutorFields.forEach((field) => {
+                if (tp[field] !== undefined) {
+                    if (["skills", "categories", "languages", "portfolioLinks"].includes(field)) {
+                        profile.tutorProfile[field] = cleanArray(tp[field]);
+                    }
+                    else if (field === "experience") {
+                        profile.tutorProfile[field] = Number(tp[field]) || 0;
+                    }
+                    else if (field === "availability") {
+                        profile.tutorProfile[field] = Boolean(tp[field]);
+                    }
+                    else if (field === "teachingMode") {
+                        profile.tutorProfile[field] = normalizeMode(tp[field]);
+                    }
+                    else {
+                        profile.tutorProfile[field] = tp[field];
+                    }
+                }
+            });
+        }
+        await Promise.all([profile.save(), user.save()]);
+        return res.json(mergeUserAndProfile(user.toObject(), profile.toObject()));
+    }
+    catch (error) {
+        console.error("UPDATE PROFILE ERROR:", error);
+        return res.status(500).json({
+            message: error.message || "Failed to update profile",
+            errors: error?.errors || null,
+        });
+    }
+};
+export const uploadPhoto = async (req, res) => {
+    try {
+        const userId = req.userId;
+        if (!userId) {
+            return res.status(401).json({ message: "Unauthorized" });
+        }
+        if (!req.file) {
+            return res.status(400).json({
+                message: "No file uploaded",
+            });
+        }
+        const result = await cloudinary.uploader.upload(req.file.path);
+        return res.json({
+            imageUrl: result.secure_url,
+        });
+    }
+    catch (error) {
+        console.error("UPLOAD ERROR:", error);
+        return res.status(500).json({
+            message: error.message || "Upload failed",
+        });
+    }
+};
+export const getPublicProfile = async (req, res) => {
+    try {
+        const { userId } = req.params;
+        if (!userId || Array.isArray(userId)) {
+            return res.status(400).json({
+                message: "Invalid userId",
+            });
+        }
+        if (!mongoose.Types.ObjectId.isValid(userId)) {
+            return res.status(400).json({
+                message: "Invalid userId format",
+            });
+        }
+        const objectId = new mongoose.Types.ObjectId(userId);
+        const profile = await Profile.findOne({ user: objectId }).lean();
+        if (!profile) {
+            return res.status(404).json({
+                message: "Profile not found",
+            });
+        }
+        const user = await User.findById(objectId)
+            .select("username profileCompleted")
+            .lean();
+        return res.json({
+            username: user?.username,
+            ...profile,
+        });
+    }
+    catch (error) {
+        console.error("GET PUBLIC PROFILE ERROR:", error);
+        return res.status(500).json({
+            message: "Failed to fetch profile",
+        });
+    }
+};
+//# sourceMappingURL=profile.controller.js.map
