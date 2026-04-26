@@ -32,6 +32,11 @@ const normalizeCourseData = (body: any) => ({
     ? body.level.charAt(0).toUpperCase() +
       body.level.slice(1).toLowerCase()
     : "Beginner",
+
+  isPublished:
+    typeof body.isPublished === "boolean"
+      ? body.isPublished
+      : true,
 });
 
 const syncCourseRatings = (
@@ -226,6 +231,47 @@ export const updateCourse: RequestHandler = async (req, res) => {
     console.error("UPDATE ERROR:", err);
     return res.status(500).json({
       message: err.message || "Failed to update course",
+    });
+  }
+};
+
+export const toggleCoursePublishStatus: RequestHandler = async (req, res) => {
+  try {
+    const userId = (req as any).userId;
+    const id = getId(req.params.id);
+    const { isPublished } = req.body;
+
+    if (!userId) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+
+    if (!isValidObjectId(id)) {
+      return res.status(400).json({ message: "Invalid ID" });
+    }
+
+    if (typeof isPublished !== "boolean") {
+      return res.status(400).json({
+        message: "isPublished must be true or false",
+      });
+    }
+
+    const course = await Course.findOneAndUpdate(
+      { _id: id, tutor: userId },
+      { isPublished },
+      { new: true }
+    );
+
+    if (!course) {
+      return res.status(404).json({
+        message: "Course not found or not authorized",
+      });
+    }
+
+    return res.json(course);
+  } catch (err: any) {
+    console.error("TOGGLE PUBLISH ERROR:", err);
+    return res.status(500).json({
+      message: err.message || "Failed to update course status",
     });
   }
 };

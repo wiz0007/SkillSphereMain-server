@@ -3,6 +3,7 @@ import Message from "../models/Message.js";
 import Profile from "../models/Profile.js";
 import Session from "../models/Session.js";
 import { emitChatMessage } from "../config/socket.js";
+const ALLOWED_CHAT_STATUSES = ["accepted", "completed"];
 const isValidObjectId = (id) => mongoose.Types.ObjectId.isValid(id);
 const getId = (param) => {
     if (typeof param === "string")
@@ -51,14 +52,42 @@ const serializeMessage = (value, currentUserId, profileMap) => ({
     isMine: (value.sender?._id?.toString?.() || value.sender?.toString?.()) ===
         currentUserId,
 });
+const getAllowedTutorIdsForStudent = async (studentId) => {
+    const tutorIds = (await Session.find({
+        student: new mongoose.Types.ObjectId(studentId),
+        status: { $in: ALLOWED_CHAT_STATUSES },
+    }).distinct("tutor")).map((id) => id.toString());
+    if (!tutorIds.length) {
+        return [];
+    }
+    const tutorProfiles = await Profile.find({
+        user: {
+            $in: tutorIds.map((id) => new mongoose.Types.ObjectId(id)),
+        },
+        isTutor: true,
+    }).select("user");
+    const allowed = new Set(tutorProfiles.map((profile) => profile.user.toString()));
+    return tutorIds.filter((id) => allowed.has(id));
+};
+const canStudentMessageTutor = async (studentId, tutorId) => {
+    const allowedTutorIds = await getAllowedTutorIdsForStudent(studentId);
+    return allowedTutorIds.includes(tutorId);
+};
 export const getConversations = async (req, res) => {
     try {
         const { userId } = req;
         if (!userId) {
             return res.status(401).json({ message: "Unauthorized" });
         }
+        const allowedTutorIds = await getAllowedTutorIdsForStudent(userId);
+        if (!allowedTutorIds.length) {
+            return res.json([]);
+        }
         const messages = await Message.find({
-            $or: [{ sender: userId }, { recipient: userId }],
+            $or: [
+                { sender: userId, recipient: { $in: allowedTutorIds } },
+                { sender: { $in: allowedTutorIds }, recipient: userId },
+            ],
         })
             .populate("sender", "username")
             .populate("recipient", "username")
@@ -71,6 +100,9 @@ export const getConversations = async (req, res) => {
             {
                 $match: {
                     recipient: new mongoose.Types.ObjectId(userId),
+                    sender: {
+                        $in: allowedTutorIds.map((id) => new mongoose.Types.ObjectId(id)),
+                    },
                     readAt: null,
                 },
             },
@@ -123,6 +155,12 @@ export const getMessagesWithUser = async (req, res) => {
         if (!isValidObjectId(otherUserId)) {
             return res.status(400).json({ message: "Invalid userId" });
         }
+        const allowed = await canStudentMessageTutor(userId, otherUserId);
+        if (!allowed) {
+            return res.status(403).json({
+                message: "Chat is only available with tutors after acceptance",
+            });
+        }
         await Message.updateMany({
             sender: otherUserId,
             recipient: userId,
@@ -165,6 +203,12 @@ export const sendMessage = async (req, res) => {
                 .status(400)
                 .json({ message: "You cannot message yourself" });
         }
+        const allowed = await canStudentMessageTutor(userId, recipientId);
+        if (!allowed) {
+            return res.status(403).json({
+                message: "Chat is only available with tutors after acceptance",
+            });
+        }
         if (!text) {
             return res.status(400).json({ message: "Message text is required" });
         }
@@ -192,52 +236,27 @@ export const getChatContacts = async (req, res) => {
         if (!userId) {
             return res.status(401).json({ message: "Unauthorized" });
         }
+        const allowedTutorIds = await getAllowedTutorIdsForStudent(userId);
+        if (!allowedTutorIds.length) {
+            return res.json([]);
+        }
         const sessions = await Session.find({
-            $or: [{ student: userId }, { tutor: userId }],
+            student: new mongoose.Types.ObjectId(userId),
+            tutor: {
+                $in: allowedTutorIds.map((id) => new mongoose.Types.ObjectId(id)),
+            },
+            status: { $in: ALLOWED_CHAT_STATUSES },
         })
-            .populate("student", "username")
             .populate("tutor", "username")
             .sort({ updatedAt: -1 });
-        const messageConversations = await Message.find({
-            $or: [{ sender: userId }, { recipient: userId }],
-        })
-            .populate("sender", "username")
-            .populate("recipient", "username")
-            .sort({ createdAt: -1 });
-        const participantIds = new Set();
-        sessions.forEach((session) => {
-            const studentId = session.student?._id?.toString?.() || "";
-            const tutorId = session.tutor?._id?.toString?.() || "";
-            const otherId = studentId === userId ? tutorId : studentId;
-            if (otherId) {
-                participantIds.add(otherId);
-            }
-        });
-        messageConversations.forEach((message) => {
-            const senderId = message.sender?._id?.toString?.() || "";
-            const recipientId = message.recipient?._id?.toString?.() || "";
-            const otherId = senderId === userId ? recipientId : senderId;
-            if (otherId) {
-                participantIds.add(otherId);
-            }
-        });
-        const profileMap = await buildProfileMap([...participantIds]);
+        const profileMap = await buildProfileMap(allowedTutorIds);
         const usersById = new Map();
         sessions.forEach((session) => {
-            [session.student, session.tutor].forEach((participant) => {
-                const id = participant?._id?.toString?.() || "";
-                if (id && id !== userId && !usersById.has(id)) {
-                    usersById.set(id, participant);
-                }
-            });
-        });
-        messageConversations.forEach((message) => {
-            [message.sender, message.recipient].forEach((participant) => {
-                const id = participant?._id?.toString?.() || "";
-                if (id && id !== userId && !usersById.has(id)) {
-                    usersById.set(id, participant);
-                }
-            });
+            const tutor = session.tutor;
+            const id = tutor?._id?.toString?.() || "";
+            if (id && !usersById.has(id)) {
+                usersById.set(id, tutor);
+            }
         });
         return res.json([...usersById.values()].map((value) => serializeUser(value, profileMap)));
     }

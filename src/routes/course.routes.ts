@@ -3,6 +3,7 @@ import {
   createCourse,
   getMyCourses,
   updateCourse,
+  toggleCoursePublishStatus,
   deleteCourse,
   getCourseById,
   getAllCourses,
@@ -46,6 +47,8 @@ router.put(
   validate(createCourseSchema),
   updateCourse
 );
+
+router.patch("/:id/publish", protect, toggleCoursePublishStatus);
 
 router.delete("/:id", protect, deleteCourse);
 
