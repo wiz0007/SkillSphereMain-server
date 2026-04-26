@@ -4,6 +4,7 @@ export declare const getAllCourses: RequestHandler;
 export declare const getMyCourses: RequestHandler;
 export declare const getCourseById: RequestHandler;
 export declare const updateCourse: RequestHandler;
+export declare const toggleCoursePublishStatus: RequestHandler;
 export declare const deleteCourse: RequestHandler;
 export declare const rateCourse: RequestHandler;
 export declare const addReview: RequestHandler;
