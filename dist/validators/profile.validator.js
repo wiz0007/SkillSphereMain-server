@@ -1,4 +1,11 @@
 import { z } from "zod";
+const phoneSchema = z
+    .string()
+    .trim()
+    .regex(/^\+?[0-9\s()-]+$/, "Invalid phone")
+    .transform((value) => value.replace(/[\s()-]/g, ""))
+    .refine((value) => value.length >= 8 && value.length <= 15, "Invalid phone")
+    .refine((value) => /^\+?[0-9]+$/.test(value), "Invalid phone");
 export const tutorSchema = z.object({
     headline: z.string().min(3).max(100),
     bio: z.string().min(20).max(500),
@@ -29,11 +36,7 @@ export const createProfileSchema = z.object({
     state: z.string().min(2),
     city: z.string().min(2),
     timezone: z.string().optional(),
-    phone: z
-        .string()
-        .min(8)
-        .max(15)
-        .regex(/^[0-9+]+$/, "Invalid phone"),
+    phone: phoneSchema,
     preferredLanguage: z.string().optional(),
     profilePhoto: z.string().optional(),
     dob: z.string().optional(),
@@ -52,7 +55,7 @@ export const updateProfileSchema = z.object({
     state: z.string().min(2).optional(),
     city: z.string().min(2).optional(),
     timezone: z.string().optional(),
-    phone: z.string().optional(),
+    phone: phoneSchema.optional(),
     preferredLanguage: z.string().optional(),
     profilePhoto: z.string().optional(),
     dob: z.string().optional(),

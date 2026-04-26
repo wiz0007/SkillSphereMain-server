@@ -23,7 +23,7 @@ export declare const createProfileSchema: z.ZodObject<{
     state: z.ZodString;
     city: z.ZodString;
     timezone: z.ZodOptional<z.ZodString>;
-    phone: z.ZodString;
+    phone: z.ZodPipe<z.ZodString, z.ZodTransform<string, string>>;
     preferredLanguage: z.ZodOptional<z.ZodString>;
     profilePhoto: z.ZodOptional<z.ZodString>;
     dob: z.ZodOptional<z.ZodString>;
@@ -41,7 +41,7 @@ export declare const updateProfileSchema: z.ZodObject<{
     state: z.ZodOptional<z.ZodString>;
     city: z.ZodOptional<z.ZodString>;
     timezone: z.ZodOptional<z.ZodString>;
-    phone: z.ZodOptional<z.ZodString>;
+    phone: z.ZodOptional<z.ZodPipe<z.ZodString, z.ZodTransform<string, string>>>;
     preferredLanguage: z.ZodOptional<z.ZodString>;
     profilePhoto: z.ZodOptional<z.ZodString>;
     dob: z.ZodOptional<z.ZodString>;

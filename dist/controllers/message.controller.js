@@ -52,9 +52,23 @@ const serializeMessage = (value, currentUserId, profileMap) => ({
     isMine: (value.sender?._id?.toString?.() || value.sender?.toString?.()) ===
         currentUserId,
 });
-const getAllowedTutorIdsForStudent = async (studentId) => {
+const getViewerProfile = async (userId) => Profile.findOne({
+    user: new mongoose.Types.ObjectId(userId),
+}).select("user isTutor");
+const getAllowedChatPartnerIds = async (userId) => {
+    const viewerProfile = await getViewerProfile(userId);
+    if (!viewerProfile) {
+        return [];
+    }
+    if (viewerProfile.isTutor) {
+        const studentIds = (await Session.find({
+            tutor: new mongoose.Types.ObjectId(userId),
+            status: { $in: ALLOWED_CHAT_STATUSES },
+        }).distinct("student")).map((id) => id.toString());
+        return [...new Set(studentIds)];
+    }
     const tutorIds = (await Session.find({
-        student: new mongoose.Types.ObjectId(studentId),
+        student: new mongoose.Types.ObjectId(userId),
         status: { $in: ALLOWED_CHAT_STATUSES },
     }).distinct("tutor")).map((id) => id.toString());
     if (!tutorIds.length) {
@@ -66,12 +80,12 @@ const getAllowedTutorIdsForStudent = async (studentId) => {
         },
         isTutor: true,
     }).select("user");
-    const allowed = new Set(tutorProfiles.map((profile) => profile.user.toString()));
-    return tutorIds.filter((id) => allowed.has(id));
+    const allowedTutorIds = new Set(tutorProfiles.map((profile) => profile.user.toString()));
+    return tutorIds.filter((id) => allowedTutorIds.has(id));
 };
-const canStudentMessageTutor = async (studentId, tutorId) => {
-    const allowedTutorIds = await getAllowedTutorIdsForStudent(studentId);
-    return allowedTutorIds.includes(tutorId);
+const canUserMessagePartner = async (userId, otherUserId) => {
+    const allowedPartnerIds = await getAllowedChatPartnerIds(userId);
+    return allowedPartnerIds.includes(otherUserId);
 };
 export const getConversations = async (req, res) => {
     try {
@@ -79,14 +93,21 @@ export const getConversations = async (req, res) => {
         if (!userId) {
             return res.status(401).json({ message: "Unauthorized" });
         }
-        const allowedTutorIds = await getAllowedTutorIdsForStudent(userId);
-        if (!allowedTutorIds.length) {
+        const allowedPartnerIds = await getAllowedChatPartnerIds(userId);
+        if (!allowedPartnerIds.length) {
             return res.json([]);
         }
+        const allowedPartnerObjectIds = allowedPartnerIds.map((id) => new mongoose.Types.ObjectId(id));
         const messages = await Message.find({
             $or: [
-                { sender: userId, recipient: { $in: allowedTutorIds } },
-                { sender: { $in: allowedTutorIds }, recipient: userId },
+                {
+                    sender: new mongoose.Types.ObjectId(userId),
+                    recipient: { $in: allowedPartnerObjectIds },
+                },
+                {
+                    sender: { $in: allowedPartnerObjectIds },
+                    recipient: new mongoose.Types.ObjectId(userId),
+                },
             ],
         })
             .populate("sender", "username")
@@ -100,9 +121,7 @@ export const getConversations = async (req, res) => {
             {
                 $match: {
                     recipient: new mongoose.Types.ObjectId(userId),
-                    sender: {
-                        $in: allowedTutorIds.map((id) => new mongoose.Types.ObjectId(id)),
-                    },
+                    sender: { $in: allowedPartnerObjectIds },
                     readAt: null,
                 },
             },
@@ -155,23 +174,29 @@ export const getMessagesWithUser = async (req, res) => {
         if (!isValidObjectId(otherUserId)) {
             return res.status(400).json({ message: "Invalid userId" });
         }
-        const allowed = await canStudentMessageTutor(userId, otherUserId);
+        const allowed = await canUserMessagePartner(userId, otherUserId);
         if (!allowed) {
             return res.status(403).json({
-                message: "Chat is only available with tutors after acceptance",
+                message: "Chat is only available after a tutor accepts the booking",
             });
         }
         await Message.updateMany({
-            sender: otherUserId,
-            recipient: userId,
+            sender: new mongoose.Types.ObjectId(otherUserId),
+            recipient: new mongoose.Types.ObjectId(userId),
             readAt: null,
         }, {
             $set: { readAt: new Date() },
         });
         const messages = await Message.find({
             $or: [
-                { sender: userId, recipient: otherUserId },
-                { sender: otherUserId, recipient: userId },
+                {
+                    sender: new mongoose.Types.ObjectId(userId),
+                    recipient: new mongoose.Types.ObjectId(otherUserId),
+                },
+                {
+                    sender: new mongoose.Types.ObjectId(otherUserId),
+                    recipient: new mongoose.Types.ObjectId(userId),
+                },
             ],
         })
             .populate("sender", "username")
@@ -203,10 +228,10 @@ export const sendMessage = async (req, res) => {
                 .status(400)
                 .json({ message: "You cannot message yourself" });
         }
-        const allowed = await canStudentMessageTutor(userId, recipientId);
+        const allowed = await canUserMessagePartner(userId, recipientId);
         if (!allowed) {
             return res.status(403).json({
-                message: "Chat is only available with tutors after acceptance",
+                message: "Chat is only available after a tutor accepts the booking",
             });
         }
         if (!text) {
@@ -236,26 +261,29 @@ export const getChatContacts = async (req, res) => {
         if (!userId) {
             return res.status(401).json({ message: "Unauthorized" });
         }
-        const allowedTutorIds = await getAllowedTutorIdsForStudent(userId);
-        if (!allowedTutorIds.length) {
+        const viewerProfile = await getViewerProfile(userId);
+        const allowedPartnerIds = await getAllowedChatPartnerIds(userId);
+        if (!viewerProfile || !allowedPartnerIds.length) {
             return res.json([]);
         }
+        const partnerField = viewerProfile.isTutor ? "student" : "tutor";
+        const queryField = viewerProfile.isTutor ? "tutor" : "student";
         const sessions = await Session.find({
-            student: new mongoose.Types.ObjectId(userId),
-            tutor: {
-                $in: allowedTutorIds.map((id) => new mongoose.Types.ObjectId(id)),
+            [queryField]: new mongoose.Types.ObjectId(userId),
+            [partnerField]: {
+                $in: allowedPartnerIds.map((id) => new mongoose.Types.ObjectId(id)),
             },
             status: { $in: ALLOWED_CHAT_STATUSES },
         })
-            .populate("tutor", "username")
+            .populate(partnerField, "username")
             .sort({ updatedAt: -1 });
-        const profileMap = await buildProfileMap(allowedTutorIds);
+        const profileMap = await buildProfileMap(allowedPartnerIds);
         const usersById = new Map();
         sessions.forEach((session) => {
-            const tutor = session.tutor;
-            const id = tutor?._id?.toString?.() || "";
+            const participant = session[partnerField];
+            const id = participant?._id?.toString?.() || "";
             if (id && !usersById.has(id)) {
-                usersById.set(id, tutor);
+                usersById.set(id, participant);
             }
         });
         return res.json([...usersById.values()].map((value) => serializeUser(value, profileMap)));
