@@ -15,6 +15,7 @@ import {
 } from "../controllers/course.controller.js";
 
 import { protect } from "../middlewares/protect.js";
+import { optionalAuth } from "../middlewares/optionalAuth.js";
 import { validate } from "../middlewares/validate.js";
 import { createCourseSchema, reviewSchema, ratingSchema } from "../validators/course.validator.js";
 import { loginLimiter } from "../middlewares/rateLimiter.js";
@@ -38,7 +39,7 @@ router.get("/my", protect, getMyCourses);
 
 router.get("/saved", protect, getSavedCourses);
 
-router.get("/:id", getCourseById); // ✅ FIXED (public)
+router.get("/:id", optionalAuth, getCourseById); // ✅ FIXED (public)
 
 
 router.put(

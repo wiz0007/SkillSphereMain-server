@@ -1,7 +1,9 @@
 import express from "express";
 import {
+  confirmSessionCompletion,
   createSession,
   getMySessions,
+  hideSession,
   updateSessionStatus,
 } from "../controllers/session.controller.js";
 
@@ -36,5 +38,8 @@ router.put(
   validate(updateSessionSchema),
   updateSessionStatus
 );
+
+router.post("/:id/hide", protect, hideSession);
+router.post("/:id/confirm-completion", protect, confirmSessionCompletion);
 
 export default router;
