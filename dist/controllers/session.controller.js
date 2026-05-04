@@ -70,6 +70,7 @@ export const createSession = async (req, res) => {
         /* 💰 PRICE FROM COURSE */
         const price = course.price || 0;
         const session = await Session.create({
+            course: course._id,
             student: new mongoose.Types.ObjectId(userId),
             tutor: tutorId,
             title: course.title,
@@ -107,8 +108,10 @@ export const getMySessions = async (req, res) => {
         }
         const userObjectId = new mongoose.Types.ObjectId(userId);
         const sessions = await Session.find({
+            hiddenFor: { $ne: userObjectId },
             $or: [{ student: userObjectId }, { tutor: userObjectId }],
         })
+            .populate("course", "title")
             .populate("student", "username email")
             .populate("tutor", "username email")
             .sort({ date: -1 });
@@ -143,6 +146,9 @@ export const updateSessionStatus = async (req, res) => {
             return res.status(403).json({ message: "Not authorized" });
         }
         session.status = status;
+        if (status === "accepted") {
+            session.acceptedAt = new Date();
+        }
         await session.save();
         const msgMap = {
             accepted: "Session accepted ✅",
@@ -164,6 +170,36 @@ export const updateSessionStatus = async (req, res) => {
     catch (err) {
         console.error("UPDATE SESSION ERROR:", err);
         return res.status(500).json({ message: "Error updating session" });
+    }
+};
+export const hideSession = async (req, res) => {
+    try {
+        const { userId } = req;
+        const id = getId(req.params.id);
+        if (!userId) {
+            return res.status(401).json({ message: "Unauthorized" });
+        }
+        if (!isValidObjectId(id)) {
+            return res.status(400).json({ message: "Invalid session ID" });
+        }
+        const userObjectId = new mongoose.Types.ObjectId(userId);
+        const session = await Session.findOne({
+            _id: id,
+            $or: [{ student: userObjectId }, { tutor: userObjectId }],
+        });
+        if (!session) {
+            return res.status(404).json({ message: "Session not found" });
+        }
+        const alreadyHidden = session.hiddenFor.some((entry) => entry.toString() === userId);
+        if (!alreadyHidden) {
+            session.hiddenFor.push(userObjectId);
+            await session.save();
+        }
+        return res.json({ success: true });
+    }
+    catch (err) {
+        console.error("HIDE SESSION ERROR:", err);
+        return res.status(500).json({ message: "Error hiding session" });
     }
 };
 //# sourceMappingURL=session.controller.js.map

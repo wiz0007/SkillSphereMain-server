@@ -1,5 +1,6 @@
 import Course from "../models/Course.js";
 import Profile from "../models/Profile.js";
+import Session from "../models/Session.js";
 import type { RequestHandler } from "express";
 import mongoose from "mongoose";
 
@@ -66,6 +67,34 @@ const syncCourseRatings = (
     ? Number((sum / total).toFixed(1))
     : 0;
   course.totalRatings = total;
+};
+
+const hasUserEnrolledInCourse = async (
+  userId: string,
+  course: {
+    _id: mongoose.Types.ObjectId | string;
+    tutor: mongoose.Types.ObjectId | string;
+    title: string;
+  }
+) => {
+  const courseObjectId = new mongoose.Types.ObjectId(course._id);
+  const studentObjectId = new mongoose.Types.ObjectId(userId);
+  const tutorObjectId = new mongoose.Types.ObjectId(course.tutor);
+
+  const enrolledSession = await Session.exists({
+    student: studentObjectId,
+    status: { $in: ["accepted", "completed"] },
+    $or: [
+      { course: courseObjectId },
+      {
+        course: { $exists: false },
+        tutor: tutorObjectId,
+        title: course.title,
+      },
+    ],
+  });
+
+  return Boolean(enrolledSession);
 };
 
 /* ================= PROFILE MERGE ================= */
@@ -175,6 +204,7 @@ export const getMyCourses: RequestHandler = async (req, res) => {
 export const getCourseById: RequestHandler = async (req, res) => {
   try {
     const id = getId(req.params.id);
+    const viewerId = req.userId;
 
     if (!isValidObjectId(id)) {
       return res.status(400).json({ message: "Invalid ID" });
@@ -182,6 +212,7 @@ export const getCourseById: RequestHandler = async (req, res) => {
 
     const course = await Course.findById(id)
       .populate("tutor", "username")
+      .populate("reviews.user", "username")
       .lean();
 
     if (!course) {
@@ -190,7 +221,33 @@ export const getCourseById: RequestHandler = async (req, res) => {
 
     const [finalCourse] = await attachProfileToCourses([course]);
 
-    return res.json(finalCourse);
+    if (!viewerId) {
+      return res.json(finalCourse);
+    }
+
+    const hasEnrolled = await hasUserEnrolledInCourse(viewerId, {
+      _id: course._id,
+      tutor: course.tutor._id,
+      title: course.title,
+    });
+
+    const hasReviewed = course.reviews.some((review: any) => {
+      const reviewUserId =
+        review.user?._id?.toString?.() ||
+        review.user?.toString?.() ||
+        "";
+
+      return reviewUserId === viewerId;
+    });
+
+    return res.json({
+      ...finalCourse,
+      reviewEligibility: {
+        canReview: hasEnrolled,
+        hasEnrolled,
+        hasReviewed,
+      },
+    });
   } catch (err: any) {
     console.error("GET ERROR:", err);
     return res.status(500).json({
@@ -360,6 +417,19 @@ export const addReview: RequestHandler = async (req, res) => {
 
     const course = await Course.findById(id);
     if (!course) return res.status(404).json({ message: "Not found" });
+
+    const hasEnrolled = await hasUserEnrolledInCourse(userId, {
+      _id: course._id,
+      tutor: course.tutor,
+      title: course.title,
+    });
+
+    if (!hasEnrolled) {
+      return res.status(403).json({
+        message:
+          "You can review this course only after you have enrolled in it",
+      });
+    }
 
     const userObjectId = new mongoose.Types.ObjectId(userId);
 

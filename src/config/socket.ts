@@ -60,3 +60,13 @@ export const emitChatMessage = (userId: string, payload: any) => {
     io.to(socketId).emit("chat:message", payload);
   }
 };
+
+export const emitWalletUpdate = (userId: string, payload: any) => {
+  if (!io) return;
+
+  const socketId = users.get(userId.toString());
+
+  if (socketId) {
+    io.to(socketId).emit("wallet:update", payload);
+  }
+};

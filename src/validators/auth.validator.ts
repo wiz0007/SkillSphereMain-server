@@ -14,3 +14,8 @@ export const deleteAccountSchema = z.object({
   currentPassword: z.string().min(1),
   confirmationText: z.literal("DELETE MY ACCOUNT"),
 });
+
+export const rechargeSkillCoinSchema = z.object({
+  amount: z.number().min(1).max(100000),
+  gatewayReference: z.string().optional(),
+});

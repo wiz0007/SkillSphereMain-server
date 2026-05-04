@@ -6,8 +6,14 @@ import Profile from "../models/Profile.js";
 import Course from "../models/Course.js";
 import Session from "../models/Session.js";
 import Activity from "../models/Activity.js";
+import { emitWalletUpdate } from "../config/socket.js";
 import { generateOTP } from "../utils/generateOtp.js";
 import { sendOTPEmail } from "../utils/sendEmail.js";
+import {
+  buildWalletSummary,
+  creditSkillCoins,
+  getRecentWalletTransactions,
+} from "../utils/wallet.js";
 
 const generateToken = (id: string) => {
   return jwt.sign({ id }, process.env.JWT_SECRET as string, {
@@ -36,6 +42,7 @@ const toSafeUser = (
     ...safeUser,
     isTutor: profile?.isTutor || false,
     profilePhoto: profile?.profilePhoto || "",
+    ...buildWalletSummary(user as any),
   };
 };
 
@@ -273,6 +280,106 @@ export const changePassword: RequestHandler = async (req, res) => {
   } catch (error: any) {
     console.error("CHANGE PASSWORD ERROR:", error);
     return res.status(500).json({ message: "Failed to update password" });
+  }
+};
+
+export const getCurrentUser: RequestHandler = async (req, res) => {
+  try {
+    const userId = req.userId;
+
+    if (!userId) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+
+    const user = await User.findById(userId);
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    const profile = await Profile.findOne({ user: user._id });
+
+    return res.json({
+      user: toSafeUser(user.toObject(), {
+        isTutor: profile?.isTutor,
+        profilePhoto: profile?.profilePhoto,
+      }),
+    });
+  } catch (error: any) {
+    console.error("ME ERROR:", error);
+    return res.status(500).json({ message: "Failed to fetch user" });
+  }
+};
+
+export const rechargeSkillCoins: RequestHandler = async (req, res) => {
+  try {
+    const userId = req.userId;
+    const amount = Number(req.body.amount);
+    const gatewayReference = String(
+      req.body.gatewayReference || `SC-${Date.now()}`
+    );
+
+    if (!userId) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+
+    if (!Number.isFinite(amount) || amount <= 0) {
+      return res.status(400).json({ message: "Invalid recharge amount" });
+    }
+
+    const user = await User.findById(userId);
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    const wallet = await creditSkillCoins(
+      user,
+      Math.round(amount),
+      "SkillCoin recharge completed",
+      {
+        extra: {
+          gatewayReference,
+          rupees: Math.round(amount),
+          skillCoins: Math.round(amount),
+        },
+      }
+    );
+
+    emitWalletUpdate(userId, wallet);
+
+    return res.json({
+      wallet,
+      conversion: {
+        rupees: Math.round(amount),
+        skillCoins: Math.round(amount),
+        rate: "1 INR = 1 SC",
+      },
+    });
+  } catch (error: any) {
+    console.error("RECHARGE ERROR:", error);
+    return res.status(500).json({
+      message: error.message || "Failed to recharge SkillCoin",
+    });
+  }
+};
+
+export const getWalletTransactions: RequestHandler = async (req, res) => {
+  try {
+    const userId = req.userId;
+
+    if (!userId) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+
+    const transactions = await getRecentWalletTransactions(userId);
+
+    return res.json(transactions);
+  } catch (error: any) {
+    console.error("WALLET HISTORY ERROR:", error);
+    return res.status(500).json({
+      message: "Failed to fetch wallet history",
+    });
   }
 };
 

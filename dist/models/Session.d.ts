@@ -1,11 +1,14 @@
 import mongoose, { Document } from "mongoose";
 export interface ISession extends Document {
+    course?: mongoose.Types.ObjectId;
     student: mongoose.Types.ObjectId;
     tutor: mongoose.Types.ObjectId;
     title: string;
     description?: string;
     date: Date;
     duration: number;
+    acceptedAt?: Date;
+    hiddenFor: mongoose.Types.ObjectId[];
     status: "pending" | "accepted" | "completed" | "cancelled";
     price: number;
 }

@@ -13,6 +13,8 @@ export interface IUser extends Document {
 
   otpAttempts: number;
   lockUntil?: Date | null;
+  skillCoinBalance: number;
+  lockedSkillCoins: number;
 }
 
 const UserSchema = new Schema<IUser>(
@@ -59,6 +61,18 @@ const UserSchema = new Schema<IUser>(
     },
 
     lockUntil: Date,
+
+    skillCoinBalance: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+
+    lockedSkillCoins: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
   },
   { timestamps: true }
 );
