@@ -9,6 +9,8 @@ export interface IUser extends Document {
     otpExpires?: Date | null;
     otpAttempts: number;
     lockUntil?: Date | null;
+    skillCoinBalance: number;
+    lockedSkillCoins: number;
 }
 declare const _default: mongoose.Model<IUser, {}, {}, {}, mongoose.Document<unknown, {}, IUser, {}, mongoose.DefaultSchemaOptions> & IUser & Required<{
     _id: mongoose.Types.ObjectId;

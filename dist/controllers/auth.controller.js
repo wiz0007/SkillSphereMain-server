@@ -1,16 +1,61 @@
 import bcrypt from "bcryptjs";
+import crypto from "crypto";
 import jwt from "jsonwebtoken";
 import User from "../models/User.js";
 import Profile from "../models/Profile.js";
 import Course from "../models/Course.js";
 import Session from "../models/Session.js";
 import Activity from "../models/Activity.js";
+import WalletRechargeOrder from "../models/WalletRechargeOrder.js";
+import { emitWalletUpdate } from "../config/socket.js";
 import { generateOTP } from "../utils/generateOtp.js";
 import { sendOTPEmail } from "../utils/sendEmail.js";
+import { buildWalletSummary, creditSkillCoins, getRecentWalletTransactions, } from "../utils/wallet.js";
 const generateToken = (id) => {
     return jwt.sign({ id }, process.env.JWT_SECRET, {
         expiresIn: "7d",
     });
+};
+const getRazorpayConfig = () => ({
+    keyId: process.env.RAZORPAY_KEY_ID || "",
+    keySecret: process.env.RAZORPAY_KEY_SECRET || "",
+});
+const createRazorpayOrder = async (amountRupees) => {
+    const { keyId, keySecret } = getRazorpayConfig();
+    if (!keyId || !keySecret) {
+        throw new Error("Razorpay is not configured on the server");
+    }
+    const response = await fetch("https://api.razorpay.com/v1/orders", {
+        method: "POST",
+        headers: {
+            "content-type": "application/json",
+            authorization: `Basic ${Buffer.from(`${keyId}:${keySecret}`).toString("base64")}`,
+        },
+        body: JSON.stringify({
+            amount: Math.round(amountRupees * 100),
+            currency: "INR",
+            receipt: `skillcoin_${Date.now()}`,
+            notes: {
+                product: "SkillCoin recharge",
+            },
+        }),
+    });
+    if (!response.ok) {
+        const payload = await response.text();
+        throw new Error(payload || "Failed to create Razorpay order");
+    }
+    return (await response.json());
+};
+const verifyRazorpaySignature = ({ orderId, paymentId, signature, }) => {
+    const { keySecret } = getRazorpayConfig();
+    if (!keySecret) {
+        throw new Error("Razorpay secret is not configured");
+    }
+    const generatedSignature = crypto
+        .createHmac("sha256", keySecret)
+        .update(`${orderId}|${paymentId}`)
+        .digest("hex");
+    return generatedSignature === signature;
 };
 const toSafeUser = (user, profile) => {
     const { password, otp, otpExpires, otpAttempts, lockUntil, __v, ...safeUser } = user;
@@ -18,6 +63,7 @@ const toSafeUser = (user, profile) => {
         ...safeUser,
         isTutor: profile?.isTutor || false,
         profilePhoto: profile?.profilePhoto || "",
+        ...buildWalletSummary(user),
     };
 };
 export const register = async (req, res) => {
@@ -204,6 +250,189 @@ export const changePassword = async (req, res) => {
     catch (error) {
         console.error("CHANGE PASSWORD ERROR:", error);
         return res.status(500).json({ message: "Failed to update password" });
+    }
+};
+export const getCurrentUser = async (req, res) => {
+    try {
+        const userId = req.userId;
+        if (!userId) {
+            return res.status(401).json({ message: "Unauthorized" });
+        }
+        const user = await User.findById(userId);
+        if (!user) {
+            return res.status(404).json({ message: "User not found" });
+        }
+        const profile = await Profile.findOne({ user: user._id });
+        return res.json({
+            user: toSafeUser(user.toObject(), {
+                isTutor: profile?.isTutor,
+                profilePhoto: profile?.profilePhoto,
+            }),
+        });
+    }
+    catch (error) {
+        console.error("ME ERROR:", error);
+        return res.status(500).json({ message: "Failed to fetch user" });
+    }
+};
+export const rechargeSkillCoins = async (req, res) => {
+    try {
+        const userId = req.userId;
+        const amount = Number(req.body.amount);
+        const gatewayReference = String(req.body.gatewayReference || `SC-${Date.now()}`);
+        if (!userId) {
+            return res.status(401).json({ message: "Unauthorized" });
+        }
+        if (!Number.isFinite(amount) || amount <= 0) {
+            return res.status(400).json({ message: "Invalid recharge amount" });
+        }
+        const user = await User.findById(userId);
+        if (!user) {
+            return res.status(404).json({ message: "User not found" });
+        }
+        const wallet = await creditSkillCoins(user, Math.round(amount), "SkillCoin recharge completed", {
+            extra: {
+                gatewayReference,
+                rupees: Math.round(amount),
+                skillCoins: Math.round(amount),
+            },
+        });
+        emitWalletUpdate(userId, wallet);
+        return res.json({
+            wallet,
+            conversion: {
+                rupees: Math.round(amount),
+                skillCoins: Math.round(amount),
+                rate: "1 INR = 1 SC",
+            },
+        });
+    }
+    catch (error) {
+        console.error("RECHARGE ERROR:", error);
+        return res.status(500).json({
+            message: error.message || "Failed to recharge SkillCoin",
+        });
+    }
+};
+export const createWalletRechargeOrder = async (req, res) => {
+    try {
+        const userId = req.userId;
+        const amount = Math.round(Number(req.body.amount));
+        if (!userId) {
+            return res.status(401).json({ message: "Unauthorized" });
+        }
+        if (!Number.isFinite(amount) || amount <= 0) {
+            return res.status(400).json({ message: "Invalid recharge amount" });
+        }
+        const order = await createRazorpayOrder(amount);
+        await WalletRechargeOrder.create({
+            user: userId,
+            amountRupees: amount,
+            skillCoins: amount,
+            razorpayOrderId: order.id,
+            status: "created",
+        });
+        return res.json({
+            orderId: order.id,
+            amount: order.amount,
+            currency: order.currency,
+            keyId: getRazorpayConfig().keyId,
+            conversion: {
+                rupees: amount,
+                skillCoins: amount,
+                rate: "1 INR = 1 SC",
+            },
+        });
+    }
+    catch (error) {
+        console.error("CREATE RECHARGE ORDER ERROR:", error);
+        return res.status(500).json({
+            message: error.message || "Failed to create recharge order",
+        });
+    }
+};
+export const verifyWalletRecharge = async (req, res) => {
+    try {
+        const userId = req.userId;
+        const razorpayOrderId = String(req.body.razorpayOrderId || "");
+        const razorpayPaymentId = String(req.body.razorpayPaymentId || "");
+        const razorpaySignature = String(req.body.razorpaySignature || "");
+        if (!userId) {
+            return res.status(401).json({ message: "Unauthorized" });
+        }
+        if (!razorpayOrderId || !razorpayPaymentId || !razorpaySignature) {
+            return res.status(400).json({
+                message: "Missing payment verification fields",
+            });
+        }
+        const pendingRecharge = await WalletRechargeOrder.findOne({
+            razorpayOrderId,
+            user: userId,
+        });
+        if (!pendingRecharge) {
+            return res.status(404).json({ message: "Recharge order not found" });
+        }
+        if (pendingRecharge.status === "paid") {
+            const existingUser = await User.findById(userId);
+            if (!existingUser) {
+                return res.status(404).json({ message: "User not found" });
+            }
+            return res.json({
+                wallet: buildWalletSummary(existingUser),
+            });
+        }
+        const isValid = verifyRazorpaySignature({
+            orderId: razorpayOrderId,
+            paymentId: razorpayPaymentId,
+            signature: razorpaySignature,
+        });
+        if (!isValid) {
+            pendingRecharge.status = "failed";
+            await pendingRecharge.save();
+            return res.status(400).json({
+                message: "Payment signature verification failed",
+            });
+        }
+        const user = await User.findById(userId);
+        if (!user) {
+            return res.status(404).json({ message: "User not found" });
+        }
+        pendingRecharge.status = "paid";
+        pendingRecharge.razorpayPaymentId = razorpayPaymentId;
+        pendingRecharge.razorpaySignature = razorpaySignature;
+        await pendingRecharge.save();
+        const wallet = await creditSkillCoins(user, pendingRecharge.skillCoins, "SkillCoin recharge completed through Razorpay", {
+            extra: {
+                razorpayOrderId,
+                razorpayPaymentId,
+                rupees: pendingRecharge.amountRupees,
+                skillCoins: pendingRecharge.skillCoins,
+            },
+        });
+        emitWalletUpdate(userId, wallet);
+        return res.json({ wallet });
+    }
+    catch (error) {
+        console.error("VERIFY RECHARGE ERROR:", error);
+        return res.status(500).json({
+            message: error.message || "Failed to verify recharge payment",
+        });
+    }
+};
+export const getWalletTransactions = async (req, res) => {
+    try {
+        const userId = req.userId;
+        if (!userId) {
+            return res.status(401).json({ message: "Unauthorized" });
+        }
+        const transactions = await getRecentWalletTransactions(userId);
+        return res.json(transactions);
+    }
+    catch (error) {
+        console.error("WALLET HISTORY ERROR:", error);
+        return res.status(500).json({
+            message: "Failed to fetch wallet history",
+        });
     }
 };
 export const deleteAccount = async (req, res) => {

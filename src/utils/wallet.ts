@@ -49,9 +49,11 @@ export const recordWalletTransaction = async ({
     balanceAfter,
     lockedAfter,
     description,
-    session: sessionId ? new mongoose.Types.ObjectId(sessionId) : undefined,
-    course: courseId ? new mongoose.Types.ObjectId(courseId) : undefined,
-    metadata,
+    ...(sessionId
+      ? { session: new mongoose.Types.ObjectId(sessionId) }
+      : {}),
+    ...(courseId ? { course: new mongoose.Types.ObjectId(courseId) } : {}),
+    ...(metadata ? { metadata } : {}),
   });
 };
 
@@ -75,9 +77,9 @@ export const creditSkillCoins = async (
     balanceAfter: user.skillCoinBalance,
     lockedAfter: user.lockedSkillCoins,
     description,
-    sessionId: metadata?.sessionId,
-    courseId: metadata?.courseId,
-    metadata: metadata?.extra,
+    ...(metadata?.sessionId ? { sessionId: metadata.sessionId } : {}),
+    ...(metadata?.courseId ? { courseId: metadata.courseId } : {}),
+    ...(metadata?.extra ? { metadata: metadata.extra } : {}),
   });
 
   return buildWalletSummary(user);
@@ -107,9 +109,9 @@ export const lockSkillCoins = async (
     balanceAfter: user.skillCoinBalance,
     lockedAfter: user.lockedSkillCoins,
     description,
-    sessionId: metadata?.sessionId,
-    courseId: metadata?.courseId,
-    metadata: metadata?.extra,
+    ...(metadata?.sessionId ? { sessionId: metadata.sessionId } : {}),
+    ...(metadata?.courseId ? { courseId: metadata.courseId } : {}),
+    ...(metadata?.extra ? { metadata: metadata.extra } : {}),
   });
 
   return buildWalletSummary(user);
@@ -135,9 +137,9 @@ export const unlockSkillCoins = async (
     balanceAfter: user.skillCoinBalance,
     lockedAfter: user.lockedSkillCoins,
     description,
-    sessionId: metadata?.sessionId,
-    courseId: metadata?.courseId,
-    metadata: metadata?.extra,
+    ...(metadata?.sessionId ? { sessionId: metadata.sessionId } : {}),
+    ...(metadata?.courseId ? { courseId: metadata.courseId } : {}),
+    ...(metadata?.extra ? { metadata: metadata.extra } : {}),
   });
 
   return buildWalletSummary(user);
@@ -173,8 +175,8 @@ export const settleLockedSkillCoins = async ({
       balanceAfter: student.skillCoinBalance,
       lockedAfter: student.lockedSkillCoins,
       description,
-      sessionId,
-      courseId,
+      ...(sessionId ? { sessionId } : {}),
+      ...(courseId ? { courseId } : {}),
     }),
     recordWalletTransaction({
       userId: tutor._id,
@@ -183,8 +185,8 @@ export const settleLockedSkillCoins = async ({
       balanceAfter: tutor.skillCoinBalance,
       lockedAfter: tutor.lockedSkillCoins,
       description,
-      sessionId,
-      courseId,
+      ...(sessionId ? { sessionId } : {}),
+      ...(courseId ? { courseId } : {}),
     }),
   ]);
 

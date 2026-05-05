@@ -51,4 +51,12 @@ export const emitChatMessage = (userId, payload) => {
         io.to(socketId).emit("chat:message", payload);
     }
 };
+export const emitWalletUpdate = (userId, payload) => {
+    if (!io)
+        return;
+    const socketId = users.get(userId.toString());
+    if (socketId) {
+        io.to(socketId).emit("wallet:update", payload);
+    }
+};
 //# sourceMappingURL=socket.js.map
