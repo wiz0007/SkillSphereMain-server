@@ -35,6 +35,16 @@ const UserSchema = new Schema({
         default: 0,
     },
     lockUntil: Date,
+    skillCoinBalance: {
+        type: Number,
+        default: 0,
+        min: 0,
+    },
+    lockedSkillCoins: {
+        type: Number,
+        default: 0,
+        min: 0,
+    },
 }, { timestamps: true });
 export default mongoose.model("User", UserSchema);
 //# sourceMappingURL=User.js.map

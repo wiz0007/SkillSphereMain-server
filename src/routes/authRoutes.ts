@@ -10,6 +10,8 @@ import {
   getCurrentUser,
   rechargeSkillCoins,
   getWalletTransactions,
+  createWalletRechargeOrder,
+  verifyWalletRecharge,
 } from "../controllers/auth.controller.js";
 import { loginLimiter, otpLimiter, registerLimiter } from "../middlewares/rateLimiter.js";
 import { protect } from "../middlewares/protect.js";
@@ -18,6 +20,7 @@ import {
   changePasswordSchema,
   deleteAccountSchema,
   rechargeSkillCoinSchema,
+  verifyWalletRechargeSchema,
 } from "../validators/auth.validator.js";
 
 const router = express.Router();
@@ -29,6 +32,20 @@ router.post("/resend-otp", otpLimiter, resendOTP);
 router.get("/check-username/:username", checkUsername);
 router.get("/me", protect, getCurrentUser);
 router.get("/wallet/history", protect, getWalletTransactions);
+router.post(
+  "/wallet/recharge-order",
+  protect,
+  loginLimiter,
+  validate(rechargeSkillCoinSchema),
+  createWalletRechargeOrder
+);
+router.post(
+  "/wallet/verify-recharge",
+  protect,
+  loginLimiter,
+  validate(verifyWalletRechargeSchema),
+  verifyWalletRecharge
+);
 router.post(
   "/wallet/recharge",
   protect,

@@ -47,7 +47,7 @@ const releaseExpiredPendingSessionLocks = async () => {
       `SkillCoin unlocked for expired request: ${session.title}`,
       {
         sessionId: session._id,
-        courseId: session.course,
+        ...(session.course ? { courseId: session.course } : {}),
       }
     );
 
@@ -77,6 +77,8 @@ export const createSession: RequestHandler = async (req, res) => {
     if (!isValidObjectId(courseId)) {
       return res.status(400).json({ message: "Invalid course ID" });
     }
+
+    await releaseExpiredPendingSessionLocks();
 
     const course = await Course.findById(courseId);
     if (!course) {
@@ -290,7 +292,7 @@ export const updateSessionStatus: RequestHandler = async (req, res) => {
         `SkillCoin unlocked after session request was declined: ${session.title}`,
         {
           sessionId: session._id,
-          courseId: session.course,
+          ...(session.course ? { courseId: session.course } : {}),
         }
       );
 
@@ -376,7 +378,7 @@ export const confirmSessionCompletion: RequestHandler = async (req, res) => {
       tutor,
       amount: session.skillCoinAmount,
       sessionId: session._id,
-      courseId: session.course,
+      ...(session.course ? { courseId: session.course } : {}),
       description: `SkillCoin settled for session: ${session.title}`,
     });
 

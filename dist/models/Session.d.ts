@@ -8,7 +8,11 @@ export interface ISession extends Document {
     date: Date;
     duration: number;
     acceptedAt?: Date;
+    tutorMarkedCompletedAt?: Date;
+    studentConfirmedCompletionAt?: Date;
     hiddenFor: mongoose.Types.ObjectId[];
+    skillCoinAmount: number;
+    coinStatus: "locked" | "released" | "settled";
     status: "pending" | "accepted" | "completed" | "cancelled";
     price: number;
 }
