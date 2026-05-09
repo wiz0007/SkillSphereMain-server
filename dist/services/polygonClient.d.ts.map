@@ -1,0 +1,1 @@
+{"version":3,"file":"polygonClient.d.ts","sourceRoot":"","sources":["../../src/services/polygonClient.ts"],"names":[],"mappings":"AAgBA,eAAO,MAAM,wBAAwB,eAKpC,CAAC;AAEF,eAAO,MAAM,qBAAqB,GAAU,wBAGzC;IACD,OAAO,EAAE,MAAM,CAAC;IAChB,QAAQ,EAAE,MAAM,CAAC;CAClB;;;EA0BA,CAAC;AAEF,eAAO,MAAM,sBAAsB,0BAAgC,CAAC"}

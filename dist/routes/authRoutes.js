@@ -1,5 +1,5 @@
 import express from "express";
-import { register, login, verifyOTP, checkUsername, resendOTP, changePassword, deleteAccount, getCurrentUser, rechargeSkillCoins, getWalletTransactions, createWalletRechargeOrder, verifyWalletRecharge, } from "../controllers/auth.controller.js";
+import { register, login, verifyOTP, checkUsername, resendOTP, changePassword, deleteAccount, getCurrentUser, getWalletTransactions, getWalletProof, createWalletRechargeOrder, verifyWalletRecharge, } from "../controllers/auth.controller.js";
 import { loginLimiter, otpLimiter, registerLimiter } from "../middlewares/rateLimiter.js";
 import { protect } from "../middlewares/protect.js";
 import { validate } from "../middlewares/validate.js";
@@ -12,9 +12,9 @@ router.post("/resend-otp", otpLimiter, resendOTP);
 router.get("/check-username/:username", checkUsername);
 router.get("/me", protect, getCurrentUser);
 router.get("/wallet/history", protect, getWalletTransactions);
+router.get("/wallet/proof/:transactionId", protect, getWalletProof);
 router.post("/wallet/recharge-order", protect, loginLimiter, validate(rechargeSkillCoinSchema), createWalletRechargeOrder);
 router.post("/wallet/verify-recharge", protect, loginLimiter, validate(verifyWalletRechargeSchema), verifyWalletRecharge);
-router.post("/wallet/recharge", protect, loginLimiter, validate(rechargeSkillCoinSchema), rechargeSkillCoins);
 router.post("/change-password", protect, loginLimiter, validate(changePasswordSchema), changePassword);
 router.post("/delete-account", protect, loginLimiter, validate(deleteAccountSchema), deleteAccount);
 export default router;

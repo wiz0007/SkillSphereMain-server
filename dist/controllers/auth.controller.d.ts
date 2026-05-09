@@ -10,5 +10,6 @@ export declare const rechargeSkillCoins: RequestHandler;
 export declare const createWalletRechargeOrder: RequestHandler;
 export declare const verifyWalletRecharge: RequestHandler;
 export declare const getWalletTransactions: RequestHandler;
+export declare const getWalletProof: RequestHandler;
 export declare const deleteAccount: RequestHandler;
 //# sourceMappingURL=auth.controller.d.ts.map

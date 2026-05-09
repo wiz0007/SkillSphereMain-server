@@ -8,8 +8,8 @@ import {
   changePassword,
   deleteAccount,
   getCurrentUser,
-  rechargeSkillCoins,
   getWalletTransactions,
+  getWalletProof,
   createWalletRechargeOrder,
   verifyWalletRecharge,
 } from "../controllers/auth.controller.js";
@@ -32,6 +32,7 @@ router.post("/resend-otp", otpLimiter, resendOTP);
 router.get("/check-username/:username", checkUsername);
 router.get("/me", protect, getCurrentUser);
 router.get("/wallet/history", protect, getWalletTransactions);
+router.get("/wallet/proof/:transactionId", protect, getWalletProof);
 router.post(
   "/wallet/recharge-order",
   protect,
@@ -45,13 +46,6 @@ router.post(
   loginLimiter,
   validate(verifyWalletRechargeSchema),
   verifyWalletRecharge
-);
-router.post(
-  "/wallet/recharge",
-  protect,
-  loginLimiter,
-  validate(rechargeSkillCoinSchema),
-  rechargeSkillCoins
 );
 router.post(
   "/change-password",

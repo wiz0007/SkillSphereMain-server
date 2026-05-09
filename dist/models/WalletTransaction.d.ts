@@ -9,6 +9,17 @@ export interface IWalletTransaction extends Document {
     session?: mongoose.Types.ObjectId;
     course?: mongoose.Types.ObjectId;
     metadata?: Record<string, unknown>;
+    hash: string;
+    previousHash?: string | null;
+    canonicalPayload: string;
+    auditStatus: "pending" | "anchored" | "failed";
+    anchorBatchId?: mongoose.Types.ObjectId;
+    anchorRoot?: string;
+    anchoredAt?: Date;
+    chainTxHash?: string;
+    chainName?: string;
+    network?: string;
+    proofPath?: string[];
 }
 declare const _default: mongoose.Model<IWalletTransaction, {}, {}, {}, mongoose.Document<unknown, {}, IWalletTransaction, {}, mongoose.DefaultSchemaOptions> & IWalletTransaction & Required<{
     _id: mongoose.Types.ObjectId;
