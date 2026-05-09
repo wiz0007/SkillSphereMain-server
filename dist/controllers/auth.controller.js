@@ -1,6 +1,7 @@
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
 import jwt from "jsonwebtoken";
+import mongoose from "mongoose";
 import User from "../models/User.js";
 import Profile from "../models/Profile.js";
 import Course from "../models/Course.js";
@@ -10,6 +11,7 @@ import WalletRechargeOrder from "../models/WalletRechargeOrder.js";
 import { emitWalletUpdate } from "../config/socket.js";
 import { generateOTP } from "../utils/generateOtp.js";
 import { sendOTPEmail } from "../utils/sendEmail.js";
+import { getWalletTransactionProof } from "../services/auditAnchor.service.js";
 import { buildWalletSummary, creditSkillCoins, getRecentWalletTransactions, } from "../utils/wallet.js";
 const generateToken = (id) => {
     return jwt.sign({ id }, process.env.JWT_SECRET, {
@@ -276,43 +278,9 @@ export const getCurrentUser = async (req, res) => {
     }
 };
 export const rechargeSkillCoins = async (req, res) => {
-    try {
-        const userId = req.userId;
-        const amount = Number(req.body.amount);
-        const gatewayReference = String(req.body.gatewayReference || `SC-${Date.now()}`);
-        if (!userId) {
-            return res.status(401).json({ message: "Unauthorized" });
-        }
-        if (!Number.isFinite(amount) || amount <= 0) {
-            return res.status(400).json({ message: "Invalid recharge amount" });
-        }
-        const user = await User.findById(userId);
-        if (!user) {
-            return res.status(404).json({ message: "User not found" });
-        }
-        const wallet = await creditSkillCoins(user, Math.round(amount), "SkillCoin recharge completed", {
-            extra: {
-                gatewayReference,
-                rupees: Math.round(amount),
-                skillCoins: Math.round(amount),
-            },
-        });
-        emitWalletUpdate(userId, wallet);
-        return res.json({
-            wallet,
-            conversion: {
-                rupees: Math.round(amount),
-                skillCoins: Math.round(amount),
-                rate: "1 INR = 1 SC",
-            },
-        });
-    }
-    catch (error) {
-        console.error("RECHARGE ERROR:", error);
-        return res.status(500).json({
-            message: error.message || "Failed to recharge SkillCoin",
-        });
-    }
+    return res.status(410).json({
+        message: "Direct SkillCoin recharge is disabled. Use the verified payment flow.",
+    });
 };
 export const createWalletRechargeOrder = async (req, res) => {
     try {
@@ -352,6 +320,7 @@ export const createWalletRechargeOrder = async (req, res) => {
     }
 };
 export const verifyWalletRecharge = async (req, res) => {
+    let dbSession = null;
     try {
         const userId = req.userId;
         const razorpayOrderId = String(req.body.razorpayOrderId || "");
@@ -393,22 +362,42 @@ export const verifyWalletRecharge = async (req, res) => {
                 message: "Payment signature verification failed",
             });
         }
-        const user = await User.findById(userId);
-        if (!user) {
-            return res.status(404).json({ message: "User not found" });
-        }
-        pendingRecharge.status = "paid";
-        pendingRecharge.razorpayPaymentId = razorpayPaymentId;
-        pendingRecharge.razorpaySignature = razorpaySignature;
-        await pendingRecharge.save();
-        const wallet = await creditSkillCoins(user, pendingRecharge.skillCoins, "SkillCoin recharge completed through Razorpay", {
-            extra: {
+        dbSession = await mongoose.startSession();
+        let wallet = null;
+        await dbSession.withTransaction(async () => {
+            const order = await WalletRechargeOrder.findOne({
                 razorpayOrderId,
-                razorpayPaymentId,
-                rupees: pendingRecharge.amountRupees,
-                skillCoins: pendingRecharge.skillCoins,
-            },
+                user: userId,
+            }).session(dbSession);
+            if (!order) {
+                throw new Error("Recharge order not found");
+            }
+            const user = await User.findById(userId).session(dbSession);
+            if (!user) {
+                throw new Error("User not found");
+            }
+            if (order.status === "paid") {
+                wallet = buildWalletSummary(user);
+                return;
+            }
+            order.status = "paid";
+            order.razorpayPaymentId = razorpayPaymentId;
+            order.razorpaySignature = razorpaySignature;
+            await order.save({ session: dbSession });
+            wallet = await creditSkillCoins(user, order.skillCoins, "SkillCoin recharge completed through Razorpay", {
+                extra: {
+                    razorpayOrderId,
+                    razorpayPaymentId,
+                    rupees: order.amountRupees,
+                    skillCoins: order.skillCoins,
+                },
+            }, dbSession);
         });
+        if (!wallet) {
+            return res.status(500).json({
+                message: "Failed to credit SkillCoin wallet",
+            });
+        }
         emitWalletUpdate(userId, wallet);
         return res.json({ wallet });
     }
@@ -418,6 +407,9 @@ export const verifyWalletRecharge = async (req, res) => {
             message: error.message || "Failed to verify recharge payment",
         });
     }
+    finally {
+        await dbSession?.endSession();
+    }
 };
 export const getWalletTransactions = async (req, res) => {
     try {
@@ -426,12 +418,45 @@ export const getWalletTransactions = async (req, res) => {
             return res.status(401).json({ message: "Unauthorized" });
         }
         const transactions = await getRecentWalletTransactions(userId);
-        return res.json(transactions);
+        return res.json(transactions.map((transaction) => ({
+            _id: transaction._id.toString(),
+            type: transaction.type,
+            amount: transaction.amount,
+            description: transaction.description,
+            createdAt: transaction.createdAt,
+            auditStatus: transaction.auditStatus || "pending",
+            hash: transaction.hash,
+            chainTxHash: transaction.chainTxHash || null,
+            chainName: transaction.chainName || null,
+            network: transaction.network || null,
+        })));
     }
     catch (error) {
         console.error("WALLET HISTORY ERROR:", error);
         return res.status(500).json({
             message: "Failed to fetch wallet history",
+        });
+    }
+};
+export const getWalletProof = async (req, res) => {
+    try {
+        const userId = req.userId;
+        const transactionId = String(req.params.transactionId || "");
+        if (!userId) {
+            return res.status(401).json({ message: "Unauthorized" });
+        }
+        const proof = await getWalletTransactionProof(transactionId, userId);
+        if (!proof) {
+            return res.status(404).json({
+                message: "Wallet transaction proof not found",
+            });
+        }
+        return res.json(proof);
+    }
+    catch (error) {
+        console.error("WALLET PROOF ERROR:", error);
+        return res.status(500).json({
+            message: "Failed to fetch wallet proof",
         });
     }
 };

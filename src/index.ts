@@ -7,6 +7,7 @@ import helmet from "helmet";
 
 import { connectDB } from "./config/db.js";
 import { initSocket } from "./config/socket.js";
+import { startAuditAnchorJob } from "./jobs/auditAnchor.job.js";
 
 import authRoutes from "./routes/authRoutes.js";
 import profileRoutes from "./routes/profile.routes.js";
@@ -88,6 +89,7 @@ const startServer = async () => {
     const server = http.createServer(app);
 
     initSocket(server);
+    startAuditAnchorJob();
 
     server.listen(PORT, () => {
       console.log(`🚀 Server running on port ${PORT}`);

@@ -44,6 +44,51 @@ const WalletTransactionSchema = new Schema({
     metadata: {
         type: Schema.Types.Mixed,
     },
+    hash: {
+        type: String,
+        required: true,
+        unique: true,
+        trim: true,
+    },
+    previousHash: {
+        type: String,
+        default: null,
+        trim: true,
+    },
+    canonicalPayload: {
+        type: String,
+        required: true,
+    },
+    auditStatus: {
+        type: String,
+        enum: ["pending", "anchored", "failed"],
+        default: "pending",
+    },
+    anchorBatchId: {
+        type: Schema.Types.ObjectId,
+        ref: "AuditAnchor",
+    },
+    anchorRoot: {
+        type: String,
+        trim: true,
+    },
+    anchoredAt: Date,
+    chainTxHash: {
+        type: String,
+        trim: true,
+    },
+    chainName: {
+        type: String,
+        trim: true,
+    },
+    network: {
+        type: String,
+        trim: true,
+    },
+    proofPath: {
+        type: [String],
+        default: [],
+    },
 }, { timestamps: true });
 export default mongoose.model("WalletTransaction", WalletTransactionSchema);
 //# sourceMappingURL=WalletTransaction.js.map

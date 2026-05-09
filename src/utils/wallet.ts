@@ -1,6 +1,10 @@
 import mongoose from "mongoose";
 import User, { type IUser } from "../models/User.js";
 import WalletTransaction from "../models/WalletTransaction.js";
+import {
+  buildCanonicalWalletPayload,
+  hashWalletPayload,
+} from "./auditHash.js";
 
 type WalletTransactionInput = {
   userId: mongoose.Types.ObjectId | string;
@@ -17,6 +21,7 @@ type WalletTransactionInput = {
   sessionId?: mongoose.Types.ObjectId | string;
   courseId?: mongoose.Types.ObjectId | string;
   metadata?: Record<string, unknown>;
+  dbSession?: mongoose.ClientSession;
 };
 
 export const getAvailableSkillCoins = (
@@ -41,20 +46,55 @@ export const recordWalletTransaction = async ({
   sessionId,
   courseId,
   metadata,
+  dbSession,
 }: WalletTransactionInput) => {
-  await WalletTransaction.create({
+  const lastTransaction = await WalletTransaction.findOne({
     user: new mongoose.Types.ObjectId(userId),
+  })
+    .session(dbSession || null)
+    .sort({ createdAt: -1, _id: -1 })
+    .select("hash")
+    .lean();
+
+  const previousHash = lastTransaction?.hash || null;
+  const createdAt = new Date().toISOString();
+  const canonicalPayload = buildCanonicalWalletPayload({
+    userId: new mongoose.Types.ObjectId(userId).toString(),
     type,
     amount,
     balanceAfter,
     lockedAfter,
     description,
-    ...(sessionId
-      ? { session: new mongoose.Types.ObjectId(sessionId) }
-      : {}),
-    ...(courseId ? { course: new mongoose.Types.ObjectId(courseId) } : {}),
+    createdAt,
+    previousHash,
+    ...(sessionId ? { sessionId: String(sessionId) } : {}),
+    ...(courseId ? { courseId: String(courseId) } : {}),
     ...(metadata ? { metadata } : {}),
   });
+  const hash = hashWalletPayload(canonicalPayload);
+
+  await WalletTransaction.create(
+    [
+      {
+        user: new mongoose.Types.ObjectId(userId),
+        type,
+        amount,
+        balanceAfter,
+        lockedAfter,
+        description,
+        ...(sessionId
+          ? { session: new mongoose.Types.ObjectId(sessionId) }
+          : {}),
+        ...(courseId ? { course: new mongoose.Types.ObjectId(courseId) } : {}),
+        ...(metadata ? { metadata } : {}),
+        hash,
+        previousHash,
+        canonicalPayload,
+        auditStatus: "pending",
+      },
+    ],
+    dbSession ? { session: dbSession } : undefined
+  );
 };
 
 export const creditSkillCoins = async (
@@ -65,10 +105,11 @@ export const creditSkillCoins = async (
     sessionId?: mongoose.Types.ObjectId | string;
     courseId?: mongoose.Types.ObjectId | string;
     extra?: Record<string, unknown>;
-  }
+  },
+  dbSession?: mongoose.ClientSession
 ) => {
   user.skillCoinBalance += amount;
-  await user.save();
+  await user.save(dbSession ? { session: dbSession } : undefined);
 
   await recordWalletTransaction({
     userId: user._id,
@@ -80,6 +121,7 @@ export const creditSkillCoins = async (
     ...(metadata?.sessionId ? { sessionId: metadata.sessionId } : {}),
     ...(metadata?.courseId ? { courseId: metadata.courseId } : {}),
     ...(metadata?.extra ? { metadata: metadata.extra } : {}),
+    ...(dbSession ? { dbSession } : {}),
   });
 
   return buildWalletSummary(user);
@@ -93,14 +135,15 @@ export const lockSkillCoins = async (
     sessionId?: mongoose.Types.ObjectId | string;
     courseId?: mongoose.Types.ObjectId | string;
     extra?: Record<string, unknown>;
-  }
+  },
+  dbSession?: mongoose.ClientSession
 ) => {
   if (getAvailableSkillCoins(user) < amount) {
     throw new Error("Insufficient SkillCoin balance");
   }
 
   user.lockedSkillCoins += amount;
-  await user.save();
+  await user.save(dbSession ? { session: dbSession } : undefined);
 
   await recordWalletTransaction({
     userId: user._id,
@@ -112,6 +155,7 @@ export const lockSkillCoins = async (
     ...(metadata?.sessionId ? { sessionId: metadata.sessionId } : {}),
     ...(metadata?.courseId ? { courseId: metadata.courseId } : {}),
     ...(metadata?.extra ? { metadata: metadata.extra } : {}),
+    ...(dbSession ? { dbSession } : {}),
   });
 
   return buildWalletSummary(user);
@@ -125,10 +169,11 @@ export const unlockSkillCoins = async (
     sessionId?: mongoose.Types.ObjectId | string;
     courseId?: mongoose.Types.ObjectId | string;
     extra?: Record<string, unknown>;
-  }
+  },
+  dbSession?: mongoose.ClientSession
 ) => {
   user.lockedSkillCoins = Math.max(0, user.lockedSkillCoins - amount);
-  await user.save();
+  await user.save(dbSession ? { session: dbSession } : undefined);
 
   await recordWalletTransaction({
     userId: user._id,
@@ -140,6 +185,7 @@ export const unlockSkillCoins = async (
     ...(metadata?.sessionId ? { sessionId: metadata.sessionId } : {}),
     ...(metadata?.courseId ? { courseId: metadata.courseId } : {}),
     ...(metadata?.extra ? { metadata: metadata.extra } : {}),
+    ...(dbSession ? { dbSession } : {}),
   });
 
   return buildWalletSummary(user);
@@ -152,6 +198,7 @@ export const settleLockedSkillCoins = async ({
   sessionId,
   courseId,
   description,
+  dbSession,
 }: {
   student: IUser;
   tutor: IUser;
@@ -159,13 +206,18 @@ export const settleLockedSkillCoins = async ({
   sessionId?: mongoose.Types.ObjectId | string;
   courseId?: mongoose.Types.ObjectId | string;
   description: string;
+  dbSession?: mongoose.ClientSession;
 }) => {
+  if (student.lockedSkillCoins < amount || student.skillCoinBalance < amount) {
+    throw new Error("Student wallet balance is inconsistent for settlement");
+  }
+
   student.lockedSkillCoins = Math.max(0, student.lockedSkillCoins - amount);
   student.skillCoinBalance = Math.max(0, student.skillCoinBalance - amount);
   tutor.skillCoinBalance += amount;
 
-  await student.save();
-  await tutor.save();
+  await student.save(dbSession ? { session: dbSession } : undefined);
+  await tutor.save(dbSession ? { session: dbSession } : undefined);
 
   await Promise.all([
     recordWalletTransaction({
@@ -177,6 +229,7 @@ export const settleLockedSkillCoins = async ({
       description,
       ...(sessionId ? { sessionId } : {}),
       ...(courseId ? { courseId } : {}),
+      ...(dbSession ? { dbSession } : {}),
     }),
     recordWalletTransaction({
       userId: tutor._id,
@@ -187,6 +240,7 @@ export const settleLockedSkillCoins = async ({
       description,
       ...(sessionId ? { sessionId } : {}),
       ...(courseId ? { courseId } : {}),
+      ...(dbSession ? { dbSession } : {}),
     }),
   ]);
 

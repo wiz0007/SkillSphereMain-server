@@ -6,7 +6,6 @@ import User from "../models/User.js";
 import { logActivity } from "../utils/activityLogger.js";
 import { emitNotification, emitWalletUpdate } from "../config/socket.js";
 import { buildWalletSummary, lockSkillCoins, settleLockedSkillCoins, unlockSkillCoins, } from "../utils/wallet.js";
-/* ================= HELPERS ================= */
 const isValidObjectId = (id) => mongoose.Types.ObjectId.isValid(id);
 const getId = (param) => {
     if (typeof param === "string")
@@ -36,8 +35,8 @@ const releaseExpiredPendingSessionLocks = async () => {
         emitWalletUpdate(student._id.toString(), buildWalletSummary(student));
     }
 };
-/* ================= CREATE SESSION ================= */
 export const createSession = async (req, res) => {
+    let dbSession = null;
     try {
         const { userId } = req;
         if (!userId) {
@@ -51,22 +50,21 @@ export const createSession = async (req, res) => {
             return res.status(400).json({ message: "Invalid course ID" });
         }
         await releaseExpiredPendingSessionLocks();
-        const course = await Course.findById(courseId);
+        dbSession = await mongoose.startSession();
+        const course = await Course.findById(courseId).session(dbSession);
         if (!course) {
             return res.status(404).json({ message: "Course not found" });
         }
         const tutorId = course.tutor;
-        /* ❌ PREVENT SELF BOOKING */
         if (tutorId.toString() === userId.toString()) {
             return res.status(400).json({
                 message: "Cannot book your own course",
             });
         }
-        const tutorProfile = await Profile.findOne({ user: tutorId });
+        const tutorProfile = await Profile.findOne({ user: tutorId }).session(dbSession);
         if (!tutorProfile || !tutorProfile.isTutor) {
             return res.status(400).json({ message: "User is not a tutor" });
         }
-        /* 🔒 DOUBLE BOOKING CHECK */
         const start = new Date(date);
         const end = new Date(start.getTime() + duration * 60000);
         const conflict = await Session.findOne({
@@ -85,68 +83,70 @@ export const createSession = async (req, res) => {
                     },
                 ],
             },
-        });
+        }).session(dbSession);
         if (conflict) {
             return res.status(400).json({
                 message: "Tutor not available at this time",
             });
         }
-        /* 💰 PRICE FROM COURSE */
         const price = course.price || 0;
         const skillCoinAmount = getSkillCoinAmount(price, Number(duration));
-        const student = await User.findById(userId);
+        const student = await User.findById(userId).session(dbSession);
         if (!student) {
             return res.status(404).json({ message: "User not found" });
         }
-        try {
+        let createdSession = null;
+        await dbSession.withTransaction(async () => {
             await lockSkillCoins(student, skillCoinAmount, `SkillCoin locked for session request: ${course.title}`, {
                 courseId: course._id,
                 extra: {
                     duration,
                     rupeesEquivalent: skillCoinAmount,
                 },
-            });
-        }
-        catch (error) {
-            return res.status(400).json({
-                message: error.message ||
-                    "You do not have enough SkillCoin to request this session",
-            });
-        }
-        const session = await Session.create({
-            course: course._id,
-            student: new mongoose.Types.ObjectId(userId),
-            tutor: tutorId,
-            title: course.title,
-            description: message,
-            date,
-            duration,
-            price,
-            skillCoinAmount,
-            coinStatus: "locked",
-            status: "pending",
+            }, dbSession);
+            const [sessionDoc] = await Session.create([
+                {
+                    course: course._id,
+                    student: new mongoose.Types.ObjectId(userId),
+                    tutor: tutorId,
+                    title: course.title,
+                    description: message,
+                    date,
+                    duration,
+                    price,
+                    skillCoinAmount,
+                    coinStatus: "locked",
+                    status: "pending",
+                },
+            ], { session: dbSession });
+            createdSession = sessionDoc;
         });
+        if (!createdSession) {
+            return res.status(500).json({ message: "Error creating session" });
+        }
         emitWalletUpdate(userId.toString(), buildWalletSummary(student));
-        /* 🔔 CREATE NOTIFICATION */
-        const msg = `A student requested "${course.title}"`;
         const notification = await logActivity({
             user: tutorId.toString(),
             type: "SESSION",
             action: "REQUESTED",
-            entityId: session._id.toString(),
-            message: msg,
+            entityId: createdSession._id.toString(),
+            message: `A student requested "${course.title}"`,
             metadata: { courseId, date },
         });
-        /* 🔥 REAL-TIME */
         emitNotification(tutorId.toString(), notification);
-        return res.status(201).json(session);
+        return res.status(201).json(createdSession);
     }
     catch (err) {
         console.error("CREATE SESSION ERROR:", err);
-        return res.status(500).json({ message: "Error creating session" });
+        return res.status(err?.message === "Insufficient SkillCoin balance" ? 400 : 500).json({
+            message: err?.message ||
+                "You do not have enough SkillCoin to request this session",
+        });
+    }
+    finally {
+        await dbSession?.endSession();
     }
 };
-/* ================= GET MY SESSIONS ================= */
 export const getMySessions = async (req, res) => {
     try {
         const { userId } = req;
@@ -170,8 +170,8 @@ export const getMySessions = async (req, res) => {
         return res.status(500).json({ message: "Error fetching sessions" });
     }
 };
-/* ================= UPDATE SESSION ================= */
 export const updateSessionStatus = async (req, res) => {
+    let dbSession = null;
     try {
         const { userId } = req;
         const id = getId(req.params.id);
@@ -186,49 +186,52 @@ export const updateSessionStatus = async (req, res) => {
         if (!allowed.includes(status)) {
             return res.status(400).json({ message: "Invalid status" });
         }
-        const session = await Session.findById(id);
+        dbSession = await mongoose.startSession();
+        const session = await Session.findById(id).session(dbSession);
         if (!session) {
             return res.status(404).json({ message: "Not found" });
         }
         if (session.tutor.toString() !== userId.toString()) {
             return res.status(403).json({ message: "Not authorized" });
         }
-        const student = await User.findById(session.student);
+        const student = await User.findById(session.student).session(dbSession);
         if (!student) {
             return res.status(404).json({ message: "Student not found" });
         }
-        session.status = status;
-        if (status === "accepted") {
-            session.acceptedAt = new Date();
-        }
-        if (status === "completed") {
-            session.tutorMarkedCompletedAt = new Date();
-        }
-        if (status === "cancelled" &&
-            session.coinStatus === "locked" &&
-            session.skillCoinAmount > 0) {
-            await unlockSkillCoins(student, session.skillCoinAmount, `SkillCoin unlocked after session request was declined: ${session.title}`, {
-                sessionId: session._id,
-                ...(session.course ? { courseId: session.course } : {}),
-            });
-            session.coinStatus = "released";
+        await dbSession.withTransaction(async () => {
+            session.status = status;
+            if (status === "accepted") {
+                session.acceptedAt = new Date();
+            }
+            if (status === "completed") {
+                session.tutorMarkedCompletedAt = new Date();
+            }
+            if (status === "cancelled" &&
+                session.coinStatus === "locked" &&
+                session.skillCoinAmount > 0) {
+                await unlockSkillCoins(student, session.skillCoinAmount, `SkillCoin unlocked after session request was declined: ${session.title}`, {
+                    sessionId: session._id,
+                    ...(session.course ? { courseId: session.course } : {}),
+                }, dbSession);
+                session.coinStatus = "released";
+            }
+            await session.save({ session: dbSession });
+        });
+        if (status === "cancelled" && session.coinStatus === "released") {
             emitWalletUpdate(student._id.toString(), buildWalletSummary(student));
         }
-        await session.save();
         const msgMap = {
             accepted: "Session accepted ✅",
             cancelled: "Session rejected ❌",
             completed: "Session marked complete. Student confirmation is pending ✅",
         };
-        const message = msgMap[status];
         const notification = await logActivity({
             user: session.student.toString(),
             type: "SESSION",
             action: status.toUpperCase(),
             entityId: session._id.toString(),
-            message,
+            message: msgMap[status],
         });
-        /* 🔥 REAL-TIME */
         emitNotification(session.student.toString(), notification);
         return res.json(session);
     }
@@ -236,8 +239,12 @@ export const updateSessionStatus = async (req, res) => {
         console.error("UPDATE SESSION ERROR:", err);
         return res.status(500).json({ message: "Error updating session" });
     }
+    finally {
+        await dbSession?.endSession();
+    }
 };
 export const confirmSessionCompletion = async (req, res) => {
+    let dbSession = null;
     try {
         const { userId } = req;
         const id = getId(req.params.id);
@@ -247,7 +254,8 @@ export const confirmSessionCompletion = async (req, res) => {
         if (!isValidObjectId(id)) {
             return res.status(400).json({ message: "Invalid session ID" });
         }
-        const session = await Session.findById(id);
+        dbSession = await mongoose.startSession();
+        const session = await Session.findById(id).session(dbSession);
         if (!session) {
             return res.status(404).json({ message: "Session not found" });
         }
@@ -259,29 +267,33 @@ export const confirmSessionCompletion = async (req, res) => {
                 message: "The tutor needs to mark the session completed first",
             });
         }
-        if (session.studentConfirmedCompletionAt || session.coinStatus === "settled") {
+        if (session.studentConfirmedCompletionAt ||
+            session.coinStatus === "settled") {
             return res.status(400).json({
                 message: "This session has already been confirmed",
             });
         }
         const [student, tutor] = await Promise.all([
-            User.findById(session.student),
-            User.findById(session.tutor),
+            User.findById(session.student).session(dbSession),
+            User.findById(session.tutor).session(dbSession),
         ]);
         if (!student || !tutor) {
             return res.status(404).json({ message: "Wallet users not found" });
         }
-        await settleLockedSkillCoins({
-            student,
-            tutor,
-            amount: session.skillCoinAmount,
-            sessionId: session._id,
-            ...(session.course ? { courseId: session.course } : {}),
-            description: `SkillCoin settled for session: ${session.title}`,
+        await dbSession.withTransaction(async () => {
+            await settleLockedSkillCoins({
+                student,
+                tutor,
+                amount: session.skillCoinAmount,
+                sessionId: session._id,
+                ...(session.course ? { courseId: session.course } : {}),
+                description: `SkillCoin settled for session: ${session.title}`,
+                dbSession: dbSession,
+            });
+            session.studentConfirmedCompletionAt = new Date();
+            session.coinStatus = "settled";
+            await session.save({ session: dbSession });
         });
-        session.studentConfirmedCompletionAt = new Date();
-        session.coinStatus = "settled";
-        await session.save();
         emitWalletUpdate(student._id.toString(), buildWalletSummary(student));
         emitWalletUpdate(tutor._id.toString(), buildWalletSummary(tutor));
         const notification = await logActivity({
@@ -299,6 +311,9 @@ export const confirmSessionCompletion = async (req, res) => {
         return res.status(500).json({
             message: "Error confirming session completion",
         });
+    }
+    finally {
+        await dbSession?.endSession();
     }
 };
 export const hideSession = async (req, res) => {
