@@ -51,6 +51,14 @@ export const emitChatMessage = (userId, payload) => {
         io.to(socketId).emit("chat:message", payload);
     }
 };
+export const emitSupportMessage = (userId, payload) => {
+    if (!io)
+        return;
+    const socketId = users.get(userId.toString());
+    if (socketId) {
+        io.to(socketId).emit("support:message", payload);
+    }
+};
 export const emitWalletUpdate = (userId, payload) => {
     if (!io)
         return;
