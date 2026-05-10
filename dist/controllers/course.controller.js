@@ -1,15 +1,14 @@
+import mongoose from "mongoose";
 import Course from "../models/Course.js";
+import CourseReview from "../models/CourseReview.js";
 import Profile from "../models/Profile.js";
 import Session from "../models/Session.js";
-import mongoose from "mongoose";
-/* ================= HELPERS ================= */
 const isValidObjectId = (id) => mongoose.Types.ObjectId.isValid(id);
 const getId = (param) => {
     if (!param)
         return "";
     return Array.isArray(param) ? param[0] ?? "" : param;
 };
-/* ================= NORMALIZE ================= */
 const normalizeCourseData = (body) => ({
     title: body.title?.trim(),
     description: body.description?.trim(),
@@ -23,29 +22,8 @@ const normalizeCourseData = (body) => ({
         ? body.level.charAt(0).toUpperCase() +
             body.level.slice(1).toLowerCase()
         : "Beginner",
-    isPublished: typeof body.isPublished === "boolean"
-        ? body.isPublished
-        : true,
+    isPublished: typeof body.isPublished === "boolean" ? body.isPublished : true,
 });
-const syncCourseRatings = (course, userId, rating) => {
-    const userObjectId = new mongoose.Types.ObjectId(userId);
-    const existing = course.ratings.find((entry) => entry.user.toString() === userObjectId.toString());
-    if (existing) {
-        existing.value = rating;
-    }
-    else {
-        course.ratings.push({
-            user: userObjectId,
-            value: rating,
-        });
-    }
-    const total = course.ratings.length;
-    const sum = course.ratings.reduce((acc, entry) => acc + entry.value, 0);
-    course.averageRating = total
-        ? Number((sum / total).toFixed(1))
-        : 0;
-    course.totalRatings = total;
-};
 const hasUserEnrolledInCourse = async (userId, course) => {
     const courseObjectId = new mongoose.Types.ObjectId(course._id);
     const studentObjectId = new mongoose.Types.ObjectId(userId);
@@ -64,11 +42,8 @@ const hasUserEnrolledInCourse = async (userId, course) => {
     });
     return Boolean(enrolledSession);
 };
-/* ================= PROFILE MERGE ================= */
 const attachProfileToCourses = async (courses) => {
-    const userIds = courses
-        .map((c) => c.tutor?._id)
-        .filter(Boolean);
+    const userIds = courses.map((c) => c.tutor?._id).filter(Boolean);
     const profiles = await Profile.find({
         user: { $in: userIds },
     })
@@ -86,7 +61,79 @@ const attachProfileToCourses = async (courses) => {
         };
     });
 };
-/* ================= CREATE ================= */
+const sanitizeCourseDocument = (course) => {
+    const { ratings, reviews, ...rest } = course;
+    return rest;
+};
+const normalizeObjectIdArray = (value) => Array.isArray(value) ? value : [];
+const extractTutorId = (tutor) => {
+    if (tutor &&
+        typeof tutor === "object" &&
+        "_id" in tutor &&
+        tutor._id) {
+        return tutor._id;
+    }
+    return tutor;
+};
+const syncCourseRatings = async (courseId) => {
+    const summary = await CourseReview.aggregate([
+        {
+            $match: {
+                course: new mongoose.Types.ObjectId(courseId),
+            },
+        },
+        {
+            $group: {
+                _id: "$course",
+                totalRatings: { $sum: 1 },
+                averageRating: { $avg: "$rating" },
+            },
+        },
+    ]);
+    const aggregates = summary[0] || {
+        totalRatings: 0,
+        averageRating: 0,
+    };
+    await Course.findByIdAndUpdate(courseId, {
+        totalRatings: aggregates.totalRatings,
+        averageRating: aggregates.totalRatings
+            ? Number(aggregates.averageRating.toFixed(1))
+            : 0,
+    });
+};
+const syncCourseReviewRefs = async (courseId) => {
+    const reviewRefs = await CourseReview.find({
+        course: new mongoose.Types.ObjectId(courseId),
+    })
+        .sort({ createdAt: 1, _id: 1 })
+        .select("_id")
+        .lean();
+    await Course.findByIdAndUpdate(courseId, {
+        reviewRefs: reviewRefs.map((entry) => entry._id),
+    });
+};
+const buildCourseReviews = async (reviewRefs) => {
+    if (!reviewRefs.length) {
+        return [];
+    }
+    const reviews = await CourseReview.find({
+        _id: {
+            $in: reviewRefs.map((reviewId) => new mongoose.Types.ObjectId(reviewId)),
+        },
+        comment: { $ne: "" },
+    })
+        .populate("user", "username")
+        .sort({ updatedAt: -1, createdAt: -1 })
+        .lean();
+    return reviews.map((review) => ({
+        _id: review._id.toString(),
+        user: review.user,
+        rating: review.rating,
+        comment: review.comment,
+        createdAt: review.createdAt,
+        updatedAt: review.updatedAt,
+    }));
+};
 export const createCourse = async (req, res) => {
     try {
         const userId = req.userId;
@@ -106,14 +153,13 @@ export const createCourse = async (req, res) => {
         });
     }
 };
-/* ================= GET ALL ================= */
-export const getAllCourses = async (req, res) => {
+export const getAllCourses = async (_req, res) => {
     try {
         const courses = await Course.find()
             .populate("tutor", "username")
             .sort({ createdAt: -1 })
             .lean();
-        const finalCourses = await attachProfileToCourses(courses);
+        const finalCourses = await attachProfileToCourses(courses.map((course) => sanitizeCourseDocument(course)));
         return res.json(finalCourses);
     }
     catch (err) {
@@ -123,7 +169,6 @@ export const getAllCourses = async (req, res) => {
         });
     }
 };
-/* ================= GET MY ================= */
 export const getMyCourses = async (req, res) => {
     try {
         const userId = req.userId;
@@ -134,7 +179,7 @@ export const getMyCourses = async (req, res) => {
             .populate("tutor", "username")
             .sort({ createdAt: -1 })
             .lean();
-        const finalCourses = await attachProfileToCourses(courses);
+        const finalCourses = await attachProfileToCourses(courses.map((course) => sanitizeCourseDocument(course)));
         return res.json(finalCourses);
     }
     catch (err) {
@@ -144,7 +189,6 @@ export const getMyCourses = async (req, res) => {
         });
     }
 };
-/* ================= GET BY ID ================= */
 export const getCourseById = async (req, res) => {
     try {
         const id = getId(req.params.id);
@@ -152,34 +196,48 @@ export const getCourseById = async (req, res) => {
         if (!isValidObjectId(id)) {
             return res.status(400).json({ message: "Invalid ID" });
         }
-        const course = await Course.findById(id)
-            .populate("tutor", "username")
-            .populate("reviews.user", "username")
-            .lean();
+        const course = await Course.findById(id).populate("tutor", "username").lean();
         if (!course) {
             return res.status(404).json({ message: "Course not found" });
         }
-        const [finalCourse] = await attachProfileToCourses([course]);
+        const savedBy = normalizeObjectIdArray(course.savedBy);
+        const tutorId = extractTutorId(course.tutor);
+        const [finalCourse] = await attachProfileToCourses([
+            sanitizeCourseDocument(course),
+        ]);
+        const reviews = await buildCourseReviews(course.reviewRefs || []);
         if (!viewerId) {
-            return res.json(finalCourse);
+            return res.json({
+                ...finalCourse,
+                reviews,
+                isSaved: false,
+            });
+        }
+        if (!tutorId) {
+            return res.status(500).json({
+                message: "Course tutor information is incomplete",
+            });
         }
         const hasEnrolled = await hasUserEnrolledInCourse(viewerId, {
             _id: course._id,
-            tutor: course.tutor._id,
+            tutor: tutorId,
             title: course.title,
         });
-        const hasReviewed = course.reviews.some((review) => {
-            const reviewUserId = review.user?._id?.toString?.() ||
-                review.user?.toString?.() ||
-                "";
-            return reviewUserId === viewerId;
-        });
+        const existingReview = await CourseReview.findOne({
+            course: course._id,
+            user: new mongoose.Types.ObjectId(viewerId),
+            comment: { $ne: "" },
+        })
+            .select("_id")
+            .lean();
         return res.json({
             ...finalCourse,
+            reviews,
+            isSaved: savedBy.some((userId) => userId.toString() === viewerId),
             reviewEligibility: {
                 canReview: hasEnrolled,
                 hasEnrolled,
-                hasReviewed,
+                hasReviewed: Boolean(existingReview),
             },
         });
     }
@@ -190,7 +248,6 @@ export const getCourseById = async (req, res) => {
         });
     }
 };
-/* ================= UPDATE ================= */
 export const updateCourse = async (req, res) => {
     try {
         const userId = req.userId;
@@ -247,7 +304,6 @@ export const toggleCoursePublishStatus = async (req, res) => {
         });
     }
 };
-/* ================= DELETE ================= */
 export const deleteCourse = async (req, res) => {
     try {
         const userId = req.userId;
@@ -267,6 +323,7 @@ export const deleteCourse = async (req, res) => {
                 message: "Course not found or not authorized",
             });
         }
+        await CourseReview.deleteMany({ course: course._id });
         return res.json({ message: "Course deleted successfully" });
     }
     catch (err) {
@@ -276,25 +333,46 @@ export const deleteCourse = async (req, res) => {
         });
     }
 };
-/* ================= RATE ================= */
 export const rateCourse = async (req, res) => {
     try {
         const userId = req.userId;
         const id = getId(req.params.id);
         const { value } = req.body;
-        if (!userId)
+        if (!userId) {
             return res.status(401).json({ message: "Unauthorized" });
+        }
         if (!isValidObjectId(id)) {
             return res.status(400).json({ message: "Invalid ID" });
         }
         const course = await Course.findById(id);
-        if (!course)
+        if (!course) {
             return res.status(404).json({ message: "Not found" });
-        syncCourseRatings(course, userId, value);
-        await course.save();
+        }
+        await CourseReview.findOneAndUpdate({
+            course: course._id,
+            user: new mongoose.Types.ObjectId(userId),
+        }, {
+            $set: {
+                rating: value,
+            },
+            $setOnInsert: {
+                course: course._id,
+                user: new mongoose.Types.ObjectId(userId),
+                comment: "",
+            },
+        }, {
+            upsert: true,
+            new: true,
+            runValidators: true,
+        });
+        await syncCourseRatings(course._id);
+        await syncCourseReviewRefs(course._id);
+        const refreshedCourse = await Course.findById(course._id)
+            .select("averageRating totalRatings")
+            .lean();
         return res.json({
-            averageRating: course.averageRating,
-            totalRatings: course.totalRatings,
+            averageRating: refreshedCourse?.averageRating || 0,
+            totalRatings: refreshedCourse?.totalRatings || 0,
         });
     }
     catch (err) {
@@ -304,20 +382,21 @@ export const rateCourse = async (req, res) => {
         });
     }
 };
-/* ================= REVIEW ================= */
 export const addReview = async (req, res) => {
     try {
         const userId = req.userId;
         const id = getId(req.params.id);
         const { rating, comment } = req.body;
-        if (!userId)
+        if (!userId) {
             return res.status(401).json({ message: "Unauthorized" });
+        }
         if (!isValidObjectId(id)) {
             return res.status(400).json({ message: "Invalid ID" });
         }
         const course = await Course.findById(id);
-        if (!course)
+        if (!course) {
             return res.status(404).json({ message: "Not found" });
+        }
         const hasEnrolled = await hasUserEnrolledInCourse(userId, {
             _id: course._id,
             tutor: course.tutor,
@@ -328,26 +407,33 @@ export const addReview = async (req, res) => {
                 message: "You can review this course only after you have enrolled in it",
             });
         }
-        const userObjectId = new mongoose.Types.ObjectId(userId);
-        const existing = course.reviews.find((r) => r.user.toString() === userObjectId.toString());
-        if (existing) {
-            existing.rating = rating;
-            existing.comment = comment;
-        }
-        else {
-            course.reviews.push({
-                user: userObjectId,
+        await CourseReview.findOneAndUpdate({
+            course: course._id,
+            user: new mongoose.Types.ObjectId(userId),
+        }, {
+            $set: {
                 rating,
-                comment,
-            });
-        }
-        syncCourseRatings(course, userId, rating);
-        await course.save();
+                comment: comment.trim(),
+            },
+            $setOnInsert: {
+                course: course._id,
+                user: new mongoose.Types.ObjectId(userId),
+            },
+        }, {
+            upsert: true,
+            new: true,
+            runValidators: true,
+        });
+        await syncCourseRatings(course._id);
+        await syncCourseReviewRefs(course._id);
+        const refreshedCourse = await Course.findById(course._id)
+            .select("reviewRefs averageRating totalRatings")
+            .lean();
+        const finalReviews = await buildCourseReviews(refreshedCourse?.reviewRefs || []);
         return res.json({
-            reviews: course.reviews,
-            ratings: course.ratings,
-            averageRating: course.averageRating,
-            totalRatings: course.totalRatings,
+            reviews: finalReviews,
+            averageRating: refreshedCourse?.averageRating || 0,
+            totalRatings: refreshedCourse?.totalRatings || 0,
         });
     }
     catch (err) {
@@ -357,7 +443,6 @@ export const addReview = async (req, res) => {
         });
     }
 };
-/* ================= SAVE ================= */
 export const saveCourse = async (req, res) => {
     try {
         const userId = req.userId;
@@ -374,7 +459,7 @@ export const saveCourse = async (req, res) => {
             return res.status(404).json({ message: "Course not found" });
         }
         return res.json({
-            isSaved: course.savedBy.some((u) => u.toString() === userId),
+            isSaved: normalizeObjectIdArray(course.savedBy).some((u) => u.toString() === userId),
         });
     }
     catch (err) {
@@ -384,7 +469,6 @@ export const saveCourse = async (req, res) => {
         });
     }
 };
-/* ================= UNSAVE ================= */
 export const unsaveCourse = async (req, res) => {
     try {
         const userId = req.userId;
@@ -401,7 +485,7 @@ export const unsaveCourse = async (req, res) => {
             return res.status(404).json({ message: "Course not found" });
         }
         return res.json({
-            isSaved: course.savedBy.some((u) => u.toString() === userId),
+            isSaved: normalizeObjectIdArray(course.savedBy).some((u) => u.toString() === userId),
         });
     }
     catch (err) {
@@ -411,7 +495,6 @@ export const unsaveCourse = async (req, res) => {
         });
     }
 };
-/* ================= GET SAVED ================= */
 export const getSavedCourses = async (req, res) => {
     try {
         const userId = req.userId;
@@ -424,7 +507,7 @@ export const getSavedCourses = async (req, res) => {
             .populate("tutor", "username")
             .sort({ createdAt: -1 })
             .lean();
-        const finalCourses = await attachProfileToCourses(courses);
+        const finalCourses = await attachProfileToCourses(courses.map((course) => sanitizeCourseDocument(course)));
         return res.json(finalCourses);
     }
     catch (err) {

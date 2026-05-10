@@ -1,15 +1,4 @@
 import mongoose, { Document } from "mongoose";
-export interface IRating {
-    user: mongoose.Types.ObjectId;
-    value: number;
-}
-export interface IReview {
-    user: mongoose.Types.ObjectId;
-    rating: number;
-    comment: string;
-    createdAt?: Date;
-    updatedAt?: Date;
-}
 export interface ICourse extends Document {
     tutor: mongoose.Types.ObjectId;
     title: string;
@@ -20,10 +9,9 @@ export interface ICourse extends Document {
     duration: string;
     level: "Beginner" | "Intermediate" | "Advanced";
     isPublished: boolean;
-    ratings: IRating[];
     averageRating: number;
     totalRatings: number;
-    reviews: IReview[];
+    reviewRefs: mongoose.Types.ObjectId[];
     savedBy: mongoose.Types.ObjectId[];
 }
 declare const _default: mongoose.Model<ICourse, {}, {}, {}, mongoose.Document<unknown, {}, ICourse, {}, mongoose.DefaultSchemaOptions> & ICourse & Required<{
