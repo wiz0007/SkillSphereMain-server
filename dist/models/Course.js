@@ -1,39 +1,4 @@
-import mongoose, { Schema, Document } from "mongoose";
-/* ================= SCHEMAS ================= */
-const RatingSchema = new Schema({
-    user: {
-        type: Schema.Types.ObjectId,
-        ref: "User",
-        required: true,
-    },
-    value: {
-        type: Number,
-        required: true,
-        min: 1,
-        max: 5,
-    },
-}, { _id: false });
-const ReviewSchema = new Schema({
-    user: {
-        type: Schema.Types.ObjectId,
-        ref: "User",
-        required: true,
-    },
-    rating: {
-        type: Number,
-        required: true,
-        min: 1,
-        max: 5,
-    },
-    comment: {
-        type: String,
-        required: true,
-        trim: true,
-    },
-}, {
-    timestamps: true,
-});
-/* ================= MAIN COURSE ================= */
+import mongoose, { Document, Schema } from "mongoose";
 const CourseSchema = new Schema({
     tutor: {
         type: Schema.Types.ObjectId,
@@ -65,11 +30,6 @@ const CourseSchema = new Schema({
         type: Boolean,
         default: true,
     },
-    /* ⭐ RATINGS */
-    ratings: {
-        type: [RatingSchema],
-        default: [],
-    },
     averageRating: {
         type: Number,
         default: 0,
@@ -78,12 +38,11 @@ const CourseSchema = new Schema({
         type: Number,
         default: 0,
     },
-    /* ✍️ REVIEWS */
-    reviews: {
-        type: [ReviewSchema],
+    reviewRefs: {
+        type: [Schema.Types.ObjectId],
+        ref: "CourseReview",
         default: [],
     },
-    /* ❤️ SAVE FEATURE */
     savedBy: {
         type: [Schema.Types.ObjectId],
         ref: "User",

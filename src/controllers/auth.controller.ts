@@ -6,6 +6,7 @@ import mongoose from "mongoose";
 import User from "../models/User.js";
 import Profile from "../models/Profile.js";
 import Course from "../models/Course.js";
+import CourseReview from "../models/CourseReview.js";
 import Session from "../models/Session.js";
 import Activity from "../models/Activity.js";
 import WalletRechargeOrder from "../models/WalletRechargeOrder.js";
@@ -641,6 +642,10 @@ export const deleteAccount: RequestHandler = async (req, res) => {
       return res.status(400).json({ message: "Current password is incorrect" });
     }
 
+    const affectedCourseIds = await CourseReview.distinct("course", {
+      user: user._id,
+    });
+
     await Promise.all([
       Activity.deleteMany({ user: user._id }),
       Session.deleteMany({
@@ -648,31 +653,43 @@ export const deleteAccount: RequestHandler = async (req, res) => {
       }),
       Profile.deleteOne({ user: user._id }),
       Course.deleteMany({ tutor: user._id }),
+      CourseReview.deleteMany({ user: user._id }),
       Course.updateMany(
         {},
         {
           $pull: {
             savedBy: user._id,
-            ratings: { user: user._id },
-            reviews: { user: user._id },
           },
         }
       ),
     ]);
 
-    const remainingCourses = await Course.find({
-      $or: [
-        { "ratings.user": user._id },
-        { "reviews.user": user._id },
-      ],
-    });
+    for (const courseId of affectedCourseIds) {
+      const [summary] = await CourseReview.aggregate<{
+        _id: mongoose.Types.ObjectId;
+        totalRatings: number;
+        averageRating: number;
+      }>([
+        {
+          $match: {
+            course: new mongoose.Types.ObjectId(courseId),
+          },
+        },
+        {
+          $group: {
+            _id: "$course",
+            totalRatings: { $sum: 1 },
+            averageRating: { $avg: "$rating" },
+          },
+        },
+      ]);
 
-    for (const course of remainingCourses) {
-      const total = course.ratings.length;
-      const sum = course.ratings.reduce((acc, entry) => acc + entry.value, 0);
-      course.totalRatings = total;
-      course.averageRating = total ? Number((sum / total).toFixed(1)) : 0;
-      await course.save();
+      await Course.findByIdAndUpdate(courseId, {
+        totalRatings: summary?.totalRatings || 0,
+        averageRating: summary?.totalRatings
+          ? Number(summary.averageRating.toFixed(1))
+          : 0,
+      });
     }
 
     await user.deleteOne();
