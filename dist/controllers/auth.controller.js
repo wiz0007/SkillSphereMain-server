@@ -23,6 +23,11 @@ const getRazorpayConfig = () => ({
     keyId: process.env.RAZORPAY_KEY_ID || "",
     keySecret: process.env.RAZORPAY_KEY_SECRET || "",
 });
+const RECHARGE_BONUS_OFFERS = [
+    { amountRupees: 500, bonusSkillCoins: 50, label: "Recharge 500, get 50 extra" },
+    { amountRupees: 1000, bonusSkillCoins: 110, label: "Recharge 1000, get 110 extra" },
+];
+const getRechargeBonus = (amountRupees) => RECHARGE_BONUS_OFFERS.find((offer) => offer.amountRupees === amountRupees)?.bonusSkillCoins || 0;
 const createRazorpayOrder = async (amountRupees) => {
     const { keyId, keySecret } = getRazorpayConfig();
     if (!keyId || !keySecret) {
@@ -293,11 +298,14 @@ export const createWalletRechargeOrder = async (req, res) => {
         if (!Number.isFinite(amount) || amount <= 0) {
             return res.status(400).json({ message: "Invalid recharge amount" });
         }
+        const bonusSkillCoins = getRechargeBonus(amount);
+        const totalSkillCoins = amount + bonusSkillCoins;
         const order = await createRazorpayOrder(amount);
         await WalletRechargeOrder.create({
             user: userId,
             amountRupees: amount,
-            skillCoins: amount,
+            bonusSkillCoins,
+            skillCoins: totalSkillCoins,
             razorpayOrderId: order.id,
             status: "created",
         });
@@ -308,9 +316,12 @@ export const createWalletRechargeOrder = async (req, res) => {
             keyId: getRazorpayConfig().keyId,
             conversion: {
                 rupees: amount,
-                skillCoins: amount,
+                baseSkillCoins: amount,
+                bonusSkillCoins,
+                skillCoins: totalSkillCoins,
                 rate: "1 INR = 1 SC",
             },
+            offers: RECHARGE_BONUS_OFFERS,
         });
     }
     catch (error) {
@@ -385,11 +396,14 @@ export const verifyWalletRecharge = async (req, res) => {
             order.razorpayPaymentId = razorpayPaymentId;
             order.razorpaySignature = razorpaySignature;
             await order.save({ session: dbSession });
-            wallet = await creditSkillCoins(user, order.skillCoins, "SkillCoin recharge completed through Razorpay", {
+            wallet = await creditSkillCoins(user, order.skillCoins, order.bonusSkillCoins
+                ? `SkillCoin recharge completed through Razorpay (+${order.bonusSkillCoins} bonus SC)`
+                : "SkillCoin recharge completed through Razorpay", {
                 extra: {
                     razorpayOrderId,
                     razorpayPaymentId,
                     rupees: order.amountRupees,
+                    bonusSkillCoins: order.bonusSkillCoins,
                     skillCoins: order.skillCoins,
                 },
             }, dbSession);

@@ -3,6 +3,7 @@ import mongoose, { Document, Schema } from "mongoose";
 export interface IWalletRechargeOrder extends Document {
   user: mongoose.Types.ObjectId;
   amountRupees: number;
+  bonusSkillCoins: number;
   skillCoins: number;
   razorpayOrderId: string;
   razorpayPaymentId?: string;
@@ -21,6 +22,12 @@ const WalletRechargeOrderSchema = new Schema<IWalletRechargeOrder>(
       type: Number,
       required: true,
       min: 1,
+    },
+    bonusSkillCoins: {
+      type: Number,
+      required: true,
+      default: 0,
+      min: 0,
     },
     skillCoins: {
       type: Number,
