@@ -32,14 +32,22 @@ const getRazorpayConfig = () => ({
 });
 
 const RECHARGE_BONUS_OFFERS = [
-  { amountRupees: 500, bonusSkillCoins: 50, label: "Recharge 500, get 50 extra" },
-  { amountRupees: 1000, bonusSkillCoins: 110, label: "Recharge 1000, get 110 extra" },
+  {
+    amountRupees: 500,
+    bonusSkillCoins: 50,
+    label: "Recharge 500+ and get 50 extra",
+  },
+  {
+    amountRupees: 1000,
+    bonusSkillCoins: 110,
+    label: "Recharge 1000+ and get 110 extra",
+  },
 ] as const;
 
 const getRechargeBonus = (amountRupees: number) =>
-  RECHARGE_BONUS_OFFERS.find(
-    (offer) => offer.amountRupees === amountRupees
-  )?.bonusSkillCoins || 0;
+  [...RECHARGE_BONUS_OFFERS]
+    .sort((left, right) => right.amountRupees - left.amountRupees)
+    .find((offer) => amountRupees >= offer.amountRupees)?.bonusSkillCoins || 0;
 
 const createRazorpayOrder = async (amountRupees: number) => {
   const { keyId, keySecret } = getRazorpayConfig();
