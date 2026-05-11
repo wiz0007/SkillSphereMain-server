@@ -10,6 +10,12 @@ const WalletRechargeOrderSchema = new Schema({
         required: true,
         min: 1,
     },
+    bonusSkillCoins: {
+        type: Number,
+        required: true,
+        default: 0,
+        min: 0,
+    },
     skillCoins: {
         type: Number,
         required: true,

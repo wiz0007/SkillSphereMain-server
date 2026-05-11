@@ -2,6 +2,7 @@ import mongoose, { Document } from "mongoose";
 export interface IWalletRechargeOrder extends Document {
     user: mongoose.Types.ObjectId;
     amountRupees: number;
+    bonusSkillCoins: number;
     skillCoins: number;
     razorpayOrderId: string;
     razorpayPaymentId?: string;
