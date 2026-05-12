@@ -232,9 +232,10 @@ export const sendMessage = async (req, res) => {
             .populate("sender", "username")
             .populate("recipient", "username");
         const profileMap = await buildProfileMap([userId, recipientId]);
-        const payload = serializeMessage(populatedMessage, userId, profileMap);
-        emitChatMessage(recipientId, payload);
-        return res.status(201).json(payload);
+        const senderPayload = serializeMessage(populatedMessage, userId, profileMap);
+        const recipientPayload = serializeMessage(populatedMessage, recipientId, profileMap);
+        emitChatMessage(recipientId, recipientPayload);
+        return res.status(201).json(senderPayload);
     }
     catch (error) {
         console.error("SEND MESSAGE ERROR:", error);
