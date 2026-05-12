@@ -308,11 +308,20 @@ export const sendMessage: RequestHandler = async (req, res) => {
       .populate("recipient", "username");
 
     const profileMap = await buildProfileMap([userId, recipientId]);
-    const payload = serializeMessage(populatedMessage, userId, profileMap);
+    const senderPayload = serializeMessage(
+      populatedMessage,
+      userId,
+      profileMap
+    );
+    const recipientPayload = serializeMessage(
+      populatedMessage,
+      recipientId,
+      profileMap
+    );
 
-    emitChatMessage(recipientId, payload);
+    emitChatMessage(recipientId, recipientPayload);
 
-    return res.status(201).json(payload);
+    return res.status(201).json(senderPayload);
   } catch (error) {
     console.error("SEND MESSAGE ERROR:", error);
     return res.status(500).json({ message: "Failed to send message" });
