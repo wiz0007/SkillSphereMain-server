@@ -73,52 +73,25 @@ const serializeMessage = (
     currentUserId,
 });
 
-const getViewerProfile = async (userId: string) =>
-  Profile.findOne({
-    user: new mongoose.Types.ObjectId(userId),
-  }).select("user isTutor");
-
 const getAllowedChatPartnerIds = async (userId: string) => {
-  const viewerProfile = await getViewerProfile(userId);
-
-  if (!viewerProfile) {
-    return [];
-  }
-
-  if (viewerProfile.isTutor) {
-    const studentIds = (
-      await Session.find({
-        tutor: new mongoose.Types.ObjectId(userId),
-        status: { $in: ALLOWED_CHAT_STATUSES },
-      }).distinct("student")
-    ).map((id) => id.toString());
-
-    return [...new Set(studentIds)];
-  }
-
-  const tutorIds = (
-    await Session.find({
+  const [studentIds, tutorIds] = await Promise.all([
+    Session.find({
+      tutor: new mongoose.Types.ObjectId(userId),
+      status: { $in: ALLOWED_CHAT_STATUSES },
+    }).distinct("student"),
+    Session.find({
       student: new mongoose.Types.ObjectId(userId),
       status: { $in: ALLOWED_CHAT_STATUSES },
-    }).distinct("tutor")
-  ).map((id) => id.toString());
+    }).distinct("tutor"),
+  ]);
 
-  if (!tutorIds.length) {
-    return [];
-  }
-
-  const tutorProfiles = await Profile.find({
-    user: {
-      $in: tutorIds.map((id) => new mongoose.Types.ObjectId(id)),
-    },
-    isTutor: true,
-  }).select("user");
-
-  const allowedTutorIds = new Set(
-    tutorProfiles.map((profile) => profile.user.toString())
-  );
-
-  return tutorIds.filter((id) => allowedTutorIds.has(id));
+  return [
+    ...new Set(
+      [...studentIds, ...tutorIds]
+        .map((id) => id.toString())
+        .filter((id) => id && id !== userId)
+    ),
+  ];
 };
 
 const canUserMessagePartner = async (
@@ -354,31 +327,41 @@ export const getChatContacts: RequestHandler = async (req, res) => {
       return res.status(401).json({ message: "Unauthorized" });
     }
 
-    const viewerProfile = await getViewerProfile(userId);
     const allowedPartnerIds = await getAllowedChatPartnerIds(userId);
 
-    if (!viewerProfile || !allowedPartnerIds.length) {
+    if (!allowedPartnerIds.length) {
       return res.json([]);
     }
 
-    const partnerField = viewerProfile.isTutor ? "student" : "tutor";
-    const queryField = viewerProfile.isTutor ? "tutor" : "student";
-
     const sessions = await Session.find({
-      [queryField]: new mongoose.Types.ObjectId(userId),
-      [partnerField]: {
-        $in: allowedPartnerIds.map((id) => new mongoose.Types.ObjectId(id)),
-      },
       status: { $in: ALLOWED_CHAT_STATUSES },
+      $or: [
+        {
+          tutor: new mongoose.Types.ObjectId(userId),
+          student: {
+            $in: allowedPartnerIds.map((id) => new mongoose.Types.ObjectId(id)),
+          },
+        },
+        {
+          student: new mongoose.Types.ObjectId(userId),
+          tutor: {
+            $in: allowedPartnerIds.map((id) => new mongoose.Types.ObjectId(id)),
+          },
+        },
+      ],
     })
-      .populate(partnerField, "username")
+      .populate("student", "username")
+      .populate("tutor", "username")
       .sort({ updatedAt: -1 });
 
     const profileMap = await buildProfileMap(allowedPartnerIds);
     const usersById = new Map<string, any>();
 
     sessions.forEach((session: any) => {
-      const participant = session[partnerField];
+      const tutorId = session.tutor?._id?.toString?.() || "";
+      const studentId = session.student?._id?.toString?.() || "";
+      const participant =
+        tutorId === userId ? session.student : session.tutor;
       const id = participant?._id?.toString?.() || "";
 
       if (id && !usersById.has(id)) {
