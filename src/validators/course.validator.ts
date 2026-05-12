@@ -7,6 +7,8 @@ export const createCourseSchema = z.object({
 
   description: z.string().min(10),
 
+  type: z.enum(["live", "recorded"]).default("live"),
+
   category: z.string().min(2),
 
   skills: z.array(z.string()).default([]),
@@ -20,7 +22,17 @@ export const createCourseSchema = z.object({
 
   duration: z.string().min(1),
 
+  contentDriveLink: z.string().trim().optional().or(z.literal("")),
+
   level: z.enum(["Beginner", "Intermediate", "Advanced"]),
+}).superRefine((data, ctx) => {
+  if (data.type === "recorded" && !data.contentDriveLink?.trim()) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["contentDriveLink"],
+      message: "Google Drive link is required for recorded courses",
+    });
+  }
 });
 
 /* ================= RATING ================= */
