@@ -1,7 +1,7 @@
 import mongoose, { Document } from "mongoose";
 export interface IWalletTransaction extends Document {
     user: mongoose.Types.ObjectId;
-    type: "recharge" | "session_lock" | "session_unlock" | "session_spend" | "session_earn";
+    type: "recharge" | "session_lock" | "session_unlock" | "session_spend" | "session_earn" | "recorded_course_lock" | "recorded_course_unlock" | "recorded_course_spend" | "recorded_course_earn";
     amount: number;
     balanceAfter: number;
     lockedAfter: number;

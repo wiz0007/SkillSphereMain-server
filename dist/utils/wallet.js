@@ -69,7 +69,7 @@ export const creditSkillCoins = async (user, amount, description, metadata, dbSe
     });
     return buildWalletSummary(user);
 };
-export const lockSkillCoins = async (user, amount, description, metadata, dbSession) => {
+export const lockSkillCoins = async (user, amount, description, metadata, dbSession, transactionType = "session_lock") => {
     if (getAvailableSkillCoins(user) < amount) {
         throw new Error("Insufficient SkillCoin balance");
     }
@@ -77,7 +77,7 @@ export const lockSkillCoins = async (user, amount, description, metadata, dbSess
     await user.save(dbSession ? { session: dbSession } : undefined);
     await recordWalletTransaction({
         userId: user._id,
-        type: "session_lock",
+        type: transactionType,
         amount: -amount,
         balanceAfter: user.skillCoinBalance,
         lockedAfter: user.lockedSkillCoins,
@@ -89,12 +89,12 @@ export const lockSkillCoins = async (user, amount, description, metadata, dbSess
     });
     return buildWalletSummary(user);
 };
-export const unlockSkillCoins = async (user, amount, description, metadata, dbSession) => {
+export const unlockSkillCoins = async (user, amount, description, metadata, dbSession, transactionType = "session_unlock") => {
     user.lockedSkillCoins = Math.max(0, user.lockedSkillCoins - amount);
     await user.save(dbSession ? { session: dbSession } : undefined);
     await recordWalletTransaction({
         userId: user._id,
-        type: "session_unlock",
+        type: transactionType,
         amount,
         balanceAfter: user.skillCoinBalance,
         lockedAfter: user.lockedSkillCoins,
@@ -106,7 +106,7 @@ export const unlockSkillCoins = async (user, amount, description, metadata, dbSe
     });
     return buildWalletSummary(user);
 };
-export const settleLockedSkillCoins = async ({ student, tutor, amount, sessionId, courseId, description, dbSession, }) => {
+export const settleLockedSkillCoins = async ({ student, tutor, amount, sessionId, courseId, description, dbSession, studentTransactionType = "session_spend", tutorTransactionType = "session_earn", }) => {
     if (student.lockedSkillCoins < amount || student.skillCoinBalance < amount) {
         throw new Error("Student wallet balance is inconsistent for settlement");
     }
@@ -118,7 +118,7 @@ export const settleLockedSkillCoins = async ({ student, tutor, amount, sessionId
     await Promise.all([
         recordWalletTransaction({
             userId: student._id,
-            type: "session_spend",
+            type: studentTransactionType,
             amount: -amount,
             balanceAfter: student.skillCoinBalance,
             lockedAfter: student.lockedSkillCoins,
@@ -129,7 +129,7 @@ export const settleLockedSkillCoins = async ({ student, tutor, amount, sessionId
         }),
         recordWalletTransaction({
             userId: tutor._id,
-            type: "session_earn",
+            type: tutorTransactionType,
             amount,
             balanceAfter: tutor.skillCoinBalance,
             lockedAfter: tutor.lockedSkillCoins,

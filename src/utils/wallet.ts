@@ -13,7 +13,11 @@ type WalletTransactionInput = {
     | "session_lock"
     | "session_unlock"
     | "session_spend"
-    | "session_earn";
+    | "session_earn"
+    | "recorded_course_lock"
+    | "recorded_course_unlock"
+    | "recorded_course_spend"
+    | "recorded_course_earn";
   amount: number;
   balanceAfter: number;
   lockedAfter: number;
@@ -136,7 +140,10 @@ export const lockSkillCoins = async (
     courseId?: mongoose.Types.ObjectId | string;
     extra?: Record<string, unknown>;
   },
-  dbSession?: mongoose.ClientSession
+  dbSession?: mongoose.ClientSession,
+  transactionType:
+    | "session_lock"
+    | "recorded_course_lock" = "session_lock"
 ) => {
   if (getAvailableSkillCoins(user) < amount) {
     throw new Error("Insufficient SkillCoin balance");
@@ -147,7 +154,7 @@ export const lockSkillCoins = async (
 
   await recordWalletTransaction({
     userId: user._id,
-    type: "session_lock",
+    type: transactionType,
     amount: -amount,
     balanceAfter: user.skillCoinBalance,
     lockedAfter: user.lockedSkillCoins,
@@ -170,14 +177,17 @@ export const unlockSkillCoins = async (
     courseId?: mongoose.Types.ObjectId | string;
     extra?: Record<string, unknown>;
   },
-  dbSession?: mongoose.ClientSession
+  dbSession?: mongoose.ClientSession,
+  transactionType:
+    | "session_unlock"
+    | "recorded_course_unlock" = "session_unlock"
 ) => {
   user.lockedSkillCoins = Math.max(0, user.lockedSkillCoins - amount);
   await user.save(dbSession ? { session: dbSession } : undefined);
 
   await recordWalletTransaction({
     userId: user._id,
-    type: "session_unlock",
+    type: transactionType,
     amount,
     balanceAfter: user.skillCoinBalance,
     lockedAfter: user.lockedSkillCoins,
@@ -199,6 +209,8 @@ export const settleLockedSkillCoins = async ({
   courseId,
   description,
   dbSession,
+  studentTransactionType = "session_spend",
+  tutorTransactionType = "session_earn",
 }: {
   student: IUser;
   tutor: IUser;
@@ -207,6 +219,12 @@ export const settleLockedSkillCoins = async ({
   courseId?: mongoose.Types.ObjectId | string;
   description: string;
   dbSession?: mongoose.ClientSession;
+  studentTransactionType?:
+    | "session_spend"
+    | "recorded_course_spend";
+  tutorTransactionType?:
+    | "session_earn"
+    | "recorded_course_earn";
 }) => {
   if (student.lockedSkillCoins < amount || student.skillCoinBalance < amount) {
     throw new Error("Student wallet balance is inconsistent for settlement");
@@ -222,7 +240,7 @@ export const settleLockedSkillCoins = async ({
   await Promise.all([
     recordWalletTransaction({
       userId: student._id,
-      type: "session_spend",
+      type: studentTransactionType,
       amount: -amount,
       balanceAfter: student.skillCoinBalance,
       lockedAfter: student.lockedSkillCoins,
@@ -233,7 +251,7 @@ export const settleLockedSkillCoins = async ({
     }),
     recordWalletTransaction({
       userId: tutor._id,
-      type: "session_earn",
+      type: tutorTransactionType,
       amount,
       balanceAfter: tutor.skillCoinBalance,
       lockedAfter: tutor.lockedSkillCoins,

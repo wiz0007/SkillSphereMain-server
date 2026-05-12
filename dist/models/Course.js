@@ -14,6 +14,11 @@ const CourseSchema = new Schema({
         type: String,
         default: "",
     },
+    type: {
+        type: String,
+        enum: ["live", "recorded"],
+        default: "live",
+    },
     category: String,
     skills: [String],
     price: {
@@ -21,6 +26,11 @@ const CourseSchema = new Schema({
         default: 0,
     },
     duration: String,
+    contentDriveLink: {
+        type: String,
+        default: "",
+        trim: true,
+    },
     level: {
         type: String,
         enum: ["Beginner", "Intermediate", "Advanced"],

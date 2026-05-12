@@ -4,10 +4,12 @@ export interface ICourse extends Document {
   tutor: mongoose.Types.ObjectId;
   title: string;
   description: string;
+  type: "live" | "recorded";
   category: string;
   skills: string[];
   price: number;
   duration: string;
+  contentDriveLink?: string;
   level: "Beginner" | "Intermediate" | "Advanced";
   isPublished: boolean;
   averageRating: number;
@@ -32,6 +34,11 @@ const CourseSchema = new Schema<ICourse>(
       type: String,
       default: "",
     },
+    type: {
+      type: String,
+      enum: ["live", "recorded"],
+      default: "live",
+    },
     category: String,
     skills: [String],
     price: {
@@ -39,6 +46,11 @@ const CourseSchema = new Schema<ICourse>(
       default: 0,
     },
     duration: String,
+    contentDriveLink: {
+      type: String,
+      default: "",
+      trim: true,
+    },
     level: {
       type: String,
       enum: ["Beginner", "Intermediate", "Advanced"],

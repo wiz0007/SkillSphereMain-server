@@ -2,7 +2,7 @@ import mongoose from "mongoose";
 import { type IUser } from "../models/User.js";
 type WalletTransactionInput = {
     userId: mongoose.Types.ObjectId | string;
-    type: "recharge" | "session_lock" | "session_unlock" | "session_spend" | "session_earn";
+    type: "recharge" | "session_lock" | "session_unlock" | "session_spend" | "session_earn" | "recorded_course_lock" | "recorded_course_unlock" | "recorded_course_spend" | "recorded_course_earn";
     amount: number;
     balanceAfter: number;
     lockedAfter: number;
@@ -32,7 +32,7 @@ export declare const lockSkillCoins: (user: IUser, amount: number, description: 
     sessionId?: mongoose.Types.ObjectId | string;
     courseId?: mongoose.Types.ObjectId | string;
     extra?: Record<string, unknown>;
-}, dbSession?: mongoose.ClientSession) => Promise<{
+}, dbSession?: mongoose.ClientSession, transactionType?: "session_lock" | "recorded_course_lock") => Promise<{
     skillCoinBalance: number;
     lockedSkillCoins: number;
     availableSkillCoins: number;
@@ -41,12 +41,12 @@ export declare const unlockSkillCoins: (user: IUser, amount: number, description
     sessionId?: mongoose.Types.ObjectId | string;
     courseId?: mongoose.Types.ObjectId | string;
     extra?: Record<string, unknown>;
-}, dbSession?: mongoose.ClientSession) => Promise<{
+}, dbSession?: mongoose.ClientSession, transactionType?: "session_unlock" | "recorded_course_unlock") => Promise<{
     skillCoinBalance: number;
     lockedSkillCoins: number;
     availableSkillCoins: number;
 }>;
-export declare const settleLockedSkillCoins: ({ student, tutor, amount, sessionId, courseId, description, dbSession, }: {
+export declare const settleLockedSkillCoins: ({ student, tutor, amount, sessionId, courseId, description, dbSession, studentTransactionType, tutorTransactionType, }: {
     student: IUser;
     tutor: IUser;
     amount: number;
@@ -54,6 +54,8 @@ export declare const settleLockedSkillCoins: ({ student, tutor, amount, sessionI
     courseId?: mongoose.Types.ObjectId | string;
     description: string;
     dbSession?: mongoose.ClientSession;
+    studentTransactionType?: "session_spend" | "recorded_course_spend";
+    tutorTransactionType?: "session_earn" | "recorded_course_earn";
 }) => Promise<{
     student: {
         skillCoinBalance: number;
