@@ -10,6 +10,7 @@ import Session from "../models/Session.js";
 import Activity from "../models/Activity.js";
 import WalletRechargeOrder from "../models/WalletRechargeOrder.js";
 import { emitWalletUpdate } from "../config/socket.js";
+import { syncAdminAccess } from "../middlewares/adminOnly.js";
 import { generateOTP } from "../utils/generateOtp.js";
 import { sendOTPEmail } from "../utils/sendEmail.js";
 import { getWalletTransactionProof } from "../services/auditAnchor.service.js";
@@ -81,6 +82,7 @@ const toSafeUser = (user, profile) => {
         ...safeUser,
         isTutor: profile?.isTutor || false,
         profilePhoto: profile?.profilePhoto || "",
+        isAdmin: Boolean(user.isAdmin),
         ...buildWalletSummary(user),
     };
 };
@@ -137,6 +139,7 @@ export const login = async (req, res) => {
         if (!user) {
             return res.status(400).json({ message: "Invalid credentials" });
         }
+        await syncAdminAccess(user._id.toString());
         if (!user.isVerified) {
             return res.status(400).json({
                 message: "Please verify your email first",
@@ -152,9 +155,10 @@ export const login = async (req, res) => {
             return res.status(400).json({ message: "Invalid credentials" });
         }
         const profile = await Profile.findOne({ user: user._id });
+        const refreshedUser = await User.findById(user._id);
         return res.json({
             token: generateToken(user._id.toString()),
-            user: toSafeUser(user.toObject(), {
+            user: toSafeUser((refreshedUser || user).toObject(), {
                 isTutor: profile?.isTutor,
                 profilePhoto: profile?.profilePhoto,
             }),
@@ -280,9 +284,11 @@ export const getCurrentUser = async (req, res) => {
         if (!user) {
             return res.status(404).json({ message: "User not found" });
         }
+        await syncAdminAccess(user._id.toString());
         const profile = await Profile.findOne({ user: user._id });
+        const refreshedUser = await User.findById(user._id);
         return res.json({
-            user: toSafeUser(user.toObject(), {
+            user: toSafeUser((refreshedUser || user).toObject(), {
                 isTutor: profile?.isTutor,
                 profilePhoto: profile?.profilePhoto,
             }),
