@@ -1,11 +1,13 @@
 import express from "express";
-import { deleteAdminCourse, deleteAdminReview, getAdminCourses, getAdminOverview, getAdminReviews, getAdminSessions, getAdminSupportConversations, getAdminUsers, getAdminWalletTransactions, updateAdminCoursePublishStatus, updateAdminSupportStatus, } from "../controllers/admin.controller.js";
+import { adjustAdminUserSkillCoins, deleteAdminUser, deleteAdminCourse, deleteAdminReview, getAdminCourses, getAdminOverview, getAdminReviews, getAdminSessions, getAdminSupportConversations, getAdminUsers, getAdminWalletTransactions, updateAdminCoursePublishStatus, updateAdminSupportStatus, } from "../controllers/admin.controller.js";
 import { adminOnly } from "../middlewares/adminOnly.js";
 import { protect } from "../middlewares/protect.js";
 const router = express.Router();
 router.use(protect, adminOnly);
 router.get("/overview", getAdminOverview);
 router.get("/users", getAdminUsers);
+router.patch("/users/:id/wallet", adjustAdminUserSkillCoins);
+router.delete("/users/:id", deleteAdminUser);
 router.get("/courses", getAdminCourses);
 router.patch("/courses/:id/publish", updateAdminCoursePublishStatus);
 router.delete("/courses/:id", deleteAdminCourse);

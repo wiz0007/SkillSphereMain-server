@@ -1,6 +1,8 @@
 import type { RequestHandler } from "express";
 export declare const getAdminOverview: RequestHandler;
 export declare const getAdminUsers: RequestHandler;
+export declare const adjustAdminUserSkillCoins: RequestHandler;
+export declare const deleteAdminUser: RequestHandler;
 export declare const getAdminCourses: RequestHandler;
 export declare const updateAdminCoursePublishStatus: RequestHandler;
 export declare const deleteAdminCourse: RequestHandler;

@@ -3,11 +3,16 @@ import mongoose from "mongoose";
 import Activity from "../models/Activity.js";
 import Course from "../models/Course.js";
 import CourseReview from "../models/CourseReview.js";
+import Message from "../models/Message.js";
 import Profile from "../models/Profile.js";
+import RecordedCourseAccess from "../models/RecordedCourseAccess.js";
 import Session from "../models/Session.js";
 import SupportConversation from "../models/SupportConversation.js";
+import SupportMessage from "../models/SupportMessage.js";
 import User from "../models/User.js";
+import WalletRechargeOrder from "../models/WalletRechargeOrder.js";
 import WalletTransaction from "../models/WalletTransaction.js";
+import { creditSkillCoins, debitSkillCoins } from "../utils/wallet.js";
 
 const isValidObjectId = (id: string) => mongoose.Types.ObjectId.isValid(id);
 
@@ -109,6 +114,61 @@ const syncCourseReviewRefs = async (courseId: mongoose.Types.ObjectId | string) 
   });
 };
 
+const deleteUserData = async (userId: mongoose.Types.ObjectId) => {
+  const affectedCourseIds = await CourseReview.distinct("course", {
+    user: userId,
+  });
+
+  const supportConversationIds = await SupportConversation.find({
+    $or: [{ requester: userId }, { assignedTo: userId }],
+  })
+    .select("_id")
+    .lean();
+
+  const ownedCourseIds = await Course.find({ tutor: userId }).distinct("_id");
+
+  await Promise.all([
+    Activity.deleteMany({ user: userId }),
+    Message.deleteMany({
+      $or: [{ sender: userId }, { recipient: userId }],
+    }),
+    Session.deleteMany({
+      $or: [{ student: userId }, { tutor: userId }],
+    }),
+    Profile.deleteOne({ user: userId }),
+    RecordedCourseAccess.deleteMany({
+      $or: [{ student: userId }, { tutor: userId }, { course: { $in: ownedCourseIds } }],
+    }),
+    CourseReview.deleteMany({ user: userId }),
+    CourseReview.deleteMany({ course: { $in: ownedCourseIds } }),
+    Course.deleteMany({ tutor: userId }),
+    SupportMessage.deleteMany({
+      $or: [
+        { sender: userId },
+        { conversation: { $in: supportConversationIds.map((entry) => entry._id) } },
+      ],
+    }),
+    SupportConversation.deleteMany({
+      $or: [{ requester: userId }, { assignedTo: userId }],
+    }),
+    WalletRechargeOrder.deleteMany({ user: userId }),
+    WalletTransaction.deleteMany({ user: userId }),
+    Course.updateMany(
+      {},
+      {
+        $pull: {
+          savedBy: userId,
+        },
+      }
+    ),
+  ]);
+
+  for (const courseId of affectedCourseIds) {
+    await syncCourseRatings(courseId);
+    await syncCourseReviewRefs(courseId);
+  }
+};
+
 export const getAdminOverview: RequestHandler = async (_req, res) => {
   try {
     const [
@@ -204,6 +264,98 @@ export const getAdminUsers: RequestHandler = async (req, res) => {
   } catch (error: any) {
     console.error("ADMIN USERS ERROR:", error);
     return res.status(500).json({ message: "Failed to fetch users" });
+  }
+};
+
+export const adjustAdminUserSkillCoins: RequestHandler = async (req, res) => {
+  try {
+    const id = getId(req.params.id);
+    const actorId = req.userId;
+    const { action, amount, note } = req.body;
+
+    if (!isValidObjectId(id)) {
+      return res.status(400).json({ message: "Invalid user ID" });
+    }
+
+    if (!actorId) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+
+    if (!["credit", "debit"].includes(action)) {
+      return res.status(400).json({ message: "Invalid wallet action" });
+    }
+
+    const numericAmount = Number(amount);
+    if (!Number.isFinite(numericAmount) || numericAmount <= 0) {
+      return res.status(400).json({ message: "Amount must be greater than 0" });
+    }
+
+    const targetUser = await User.findById(id);
+
+    if (!targetUser) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    const actor = await User.findById(actorId).select("email username").lean();
+    const actorLabel = actor?.email || actor?.username || "admin";
+    const description = `Admin ${action} by ${actorLabel}${note ? `: ${String(note).trim()}` : ""}`;
+    const metadata = {
+      extra: {
+        adminId: actorId,
+        note: typeof note === "string" ? note.trim() : "",
+      },
+    };
+
+    const walletSummary =
+      action === "credit"
+        ? await creditSkillCoins(targetUser, numericAmount, description, metadata)
+        : await debitSkillCoins(targetUser, numericAmount, description, metadata);
+
+    return res.json({
+      message:
+        action === "credit"
+          ? "SkillCoin credited successfully"
+          : "SkillCoin debited successfully",
+      wallet: walletSummary,
+    });
+  } catch (error: any) {
+    console.error("ADMIN USER WALLET ERROR:", error);
+    return res.status(500).json({
+      message: error?.message || "Failed to update user wallet",
+    });
+  }
+};
+
+export const deleteAdminUser: RequestHandler = async (req, res) => {
+  try {
+    const id = getId(req.params.id);
+    const actorId = req.userId;
+
+    if (!isValidObjectId(id)) {
+      return res.status(400).json({ message: "Invalid user ID" });
+    }
+
+    if (!actorId) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+
+    if (id === actorId) {
+      return res.status(400).json({ message: "Use account deletion for your own admin account" });
+    }
+
+    const user = await User.findById(id);
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    await deleteUserData(user._id);
+    await user.deleteOne();
+
+    return res.json({ message: "User deleted successfully" });
+  } catch (error: any) {
+    console.error("ADMIN DELETE USER ERROR:", error);
+    return res.status(500).json({ message: "Failed to delete user" });
   }
 };
 
