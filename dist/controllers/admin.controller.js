@@ -11,6 +11,8 @@ import SupportMessage from "../models/SupportMessage.js";
 import User from "../models/User.js";
 import WalletRechargeOrder from "../models/WalletRechargeOrder.js";
 import WalletTransaction from "../models/WalletTransaction.js";
+import { emitNotification, emitWalletUpdate } from "../config/socket.js";
+import { logActivity } from "../utils/activityLogger.js";
 import { creditSkillCoins, debitSkillCoins } from "../utils/wallet.js";
 const isValidObjectId = (id) => mongoose.Types.ObjectId.isValid(id);
 const getId = (param) => {
@@ -251,6 +253,23 @@ export const adjustAdminUserSkillCoins = async (req, res) => {
         const walletSummary = action === "credit"
             ? await creditSkillCoins(targetUser, numericAmount, description, metadata)
             : await debitSkillCoins(targetUser, numericAmount, description, metadata);
+        emitWalletUpdate(targetUser._id.toString(), walletSummary);
+        if (action === "credit") {
+            const giftNotification = await logActivity({
+                user: targetUser._id.toString(),
+                type: "SYSTEM",
+                action: "ADMIN_GIFT",
+                message: `You received ${numericAmount} SkillCoin from admin`,
+                metadata: {
+                    kind: "admin_skillcoin_gift",
+                    amount: numericAmount,
+                    note: typeof note === "string" ? note.trim() : "",
+                },
+            });
+            if (giftNotification) {
+                emitNotification(targetUser._id.toString(), giftNotification);
+            }
+        }
         return res.json({
             message: action === "credit"
                 ? "SkillCoin credited successfully"
