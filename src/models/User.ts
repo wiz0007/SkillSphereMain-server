@@ -15,6 +15,7 @@ export interface IUser extends Document {
   lockUntil?: Date | null;
   skillCoinBalance: number;
   lockedSkillCoins: number;
+  isAdmin: boolean;
 }
 
 const UserSchema = new Schema<IUser>(
@@ -61,6 +62,11 @@ const UserSchema = new Schema<IUser>(
     },
 
     lockUntil: Date,
+
+    isAdmin: {
+      type: Boolean,
+      default: false,
+    },
 
     skillCoinBalance: {
       type: Number,

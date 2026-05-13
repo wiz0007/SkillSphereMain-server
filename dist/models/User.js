@@ -35,6 +35,10 @@ const UserSchema = new Schema({
         default: 0,
     },
     lockUntil: Date,
+    isAdmin: {
+        type: Boolean,
+        default: false,
+    },
     skillCoinBalance: {
         type: Number,
         default: 0,
