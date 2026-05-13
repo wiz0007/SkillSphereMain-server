@@ -1,5 +1,5 @@
 import express from "express";
-import { register, login, verifyOTP, checkUsername, resendOTP, changePassword, deleteAccount, getCurrentUser, getWalletTransactions, getWalletProof, createWalletRechargeOrder, verifyWalletRecharge, } from "../controllers/auth.controller.js";
+import { register, login, verifyOTP, checkUsername, resendOTP, changePassword, deleteAccount, getCurrentUser, getPendingAdminGift, getWalletTransactions, getWalletProof, createWalletRechargeOrder, verifyWalletRecharge, claimAdminGift, } from "../controllers/auth.controller.js";
 import { loginLimiter, otpLimiter, registerLimiter } from "../middlewares/rateLimiter.js";
 import { protect } from "../middlewares/protect.js";
 import { validate } from "../middlewares/validate.js";
@@ -11,6 +11,8 @@ router.post("/verify-otp", otpLimiter, verifyOTP);
 router.post("/resend-otp", otpLimiter, resendOTP);
 router.get("/check-username/:username", checkUsername);
 router.get("/me", protect, getCurrentUser);
+router.get("/admin-gifts/pending", protect, getPendingAdminGift);
+router.post("/admin-gifts/:giftId/claim", protect, claimAdminGift);
 router.get("/wallet/history", protect, getWalletTransactions);
 router.get("/wallet/proof/:transactionId", protect, getWalletProof);
 router.post("/wallet/recharge-order", protect, loginLimiter, validate(rechargeSkillCoinSchema), createWalletRechargeOrder);

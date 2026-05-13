@@ -1,5 +1,6 @@
 import mongoose from "mongoose";
 import Activity from "../models/Activity.js";
+import AdminGift from "../models/AdminGift.js";
 import Course from "../models/Course.js";
 import CourseReview from "../models/CourseReview.js";
 import Message from "../models/Message.js";
@@ -13,7 +14,7 @@ import WalletRechargeOrder from "../models/WalletRechargeOrder.js";
 import WalletTransaction from "../models/WalletTransaction.js";
 import { emitNotification, emitWalletUpdate } from "../config/socket.js";
 import { logActivity } from "../utils/activityLogger.js";
-import { creditSkillCoins, debitSkillCoins } from "../utils/wallet.js";
+import { debitSkillCoins } from "../utils/wallet.js";
 const isValidObjectId = (id) => mongoose.Types.ObjectId.isValid(id);
 const getId = (param) => {
     if (typeof param === "string")
@@ -243,36 +244,47 @@ export const adjustAdminUserSkillCoins = async (req, res) => {
         }
         const actor = await User.findById(actorId).select("email username").lean();
         const actorLabel = actor?.email || actor?.username || "admin";
-        const description = `Admin ${action} by ${actorLabel}${note ? `: ${String(note).trim()}` : ""}`;
+        const trimmedNote = typeof note === "string" ? note.trim() : "";
+        const description = `Admin ${action} by ${actorLabel}${trimmedNote ? `: ${trimmedNote}` : ""}`;
         const metadata = {
             extra: {
                 adminId: actorId,
-                note: typeof note === "string" ? note.trim() : "",
+                note: trimmedNote,
             },
         };
-        const walletSummary = action === "credit"
-            ? await creditSkillCoins(targetUser, numericAmount, description, metadata)
-            : await debitSkillCoins(targetUser, numericAmount, description, metadata);
-        emitWalletUpdate(targetUser._id.toString(), walletSummary);
+        let walletSummary = null;
         if (action === "credit") {
+            const gift = await AdminGift.create({
+                recipient: targetUser._id,
+                senderAdmin: new mongoose.Types.ObjectId(actorId),
+                amount: numericAmount,
+                note: trimmedNote,
+                status: "pending",
+            });
             const giftNotification = await logActivity({
                 user: targetUser._id.toString(),
                 type: "SYSTEM",
                 action: "ADMIN_GIFT",
-                message: `You received ${numericAmount} SkillCoin from admin`,
+                entityId: gift._id.toString(),
+                message: `Admin sent you a ${numericAmount} SkillCoin gift`,
                 metadata: {
                     kind: "admin_skillcoin_gift",
+                    giftId: gift._id.toString(),
                     amount: numericAmount,
-                    note: typeof note === "string" ? note.trim() : "",
+                    note: trimmedNote,
                 },
             });
             if (giftNotification) {
                 emitNotification(targetUser._id.toString(), giftNotification);
             }
         }
+        else {
+            walletSummary = await debitSkillCoins(targetUser, numericAmount, description, metadata);
+            emitWalletUpdate(targetUser._id.toString(), walletSummary);
+        }
         return res.json({
             message: action === "credit"
-                ? "SkillCoin credited successfully"
+                ? "Gift sent successfully"
                 : "SkillCoin debited successfully",
             wallet: walletSummary,
         });
