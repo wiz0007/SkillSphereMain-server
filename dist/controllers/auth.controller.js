@@ -8,6 +8,7 @@ import Course from "../models/Course.js";
 import CourseReview from "../models/CourseReview.js";
 import Session from "../models/Session.js";
 import Activity from "../models/Activity.js";
+import AdminGift from "../models/AdminGift.js";
 import WalletRechargeOrder from "../models/WalletRechargeOrder.js";
 import { emitWalletUpdate } from "../config/socket.js";
 import { syncAdminAccess } from "../middlewares/adminOnly.js";
@@ -489,6 +490,111 @@ export const getWalletProof = async (req, res) => {
         return res.status(500).json({
             message: "Failed to fetch wallet proof",
         });
+    }
+};
+export const getPendingAdminGift = async (req, res) => {
+    try {
+        const userId = req.userId;
+        if (!userId) {
+            return res.status(401).json({ message: "Unauthorized" });
+        }
+        const gift = await AdminGift.findOne({
+            recipient: userId,
+            status: "pending",
+        })
+            .sort({ createdAt: -1 })
+            .lean();
+        if (!gift) {
+            return res.json({ gift: null });
+        }
+        return res.json({
+            gift: {
+                _id: gift._id.toString(),
+                amount: gift.amount,
+                note: gift.note || "",
+                createdAt: gift.createdAt,
+            },
+        });
+    }
+    catch (error) {
+        console.error("PENDING ADMIN GIFT ERROR:", error);
+        return res.status(500).json({ message: "Failed to fetch pending admin gift" });
+    }
+};
+export const claimAdminGift = async (req, res) => {
+    let dbSession = null;
+    try {
+        const userId = req.userId;
+        const giftId = String(req.params.giftId || "");
+        if (!userId) {
+            return res.status(401).json({ message: "Unauthorized" });
+        }
+        if (!mongoose.Types.ObjectId.isValid(giftId)) {
+            return res.status(400).json({ message: "Invalid gift ID" });
+        }
+        dbSession = await mongoose.startSession();
+        let wallet = null;
+        let claimedGift = null;
+        await dbSession.withTransaction(async () => {
+            const gift = await AdminGift.findOne({
+                _id: giftId,
+                recipient: userId,
+            }).session(dbSession);
+            if (!gift) {
+                throw new Error("Gift not found");
+            }
+            if (gift.status === "claimed") {
+                throw new Error("Gift already claimed");
+            }
+            const user = await User.findById(userId).session(dbSession);
+            if (!user) {
+                throw new Error("User not found");
+            }
+            wallet = await creditSkillCoins(user, gift.amount, gift.note
+                ? `Admin gift claimed (+${gift.amount} SC): ${gift.note}`
+                : `Admin gift claimed (+${gift.amount} SC)`, {
+                extra: {
+                    giftId: gift._id.toString(),
+                    senderAdminId: gift.senderAdmin.toString(),
+                    note: gift.note || "",
+                },
+            }, dbSession || undefined);
+            gift.status = "claimed";
+            gift.claimedAt = new Date();
+            await gift.save({ session: dbSession });
+            claimedGift = gift;
+        });
+        if (!wallet || !claimedGift) {
+            return res.status(500).json({ message: "Failed to claim admin gift" });
+        }
+        await Activity.updateMany({
+            user: new mongoose.Types.ObjectId(userId),
+            action: "ADMIN_GIFT",
+            "metadata.giftId": claimedGift._id.toString(),
+        }, {
+            $set: {
+                isRead: true,
+            },
+        });
+        emitWalletUpdate(userId, wallet);
+        return res.json({
+            message: "Gift claimed successfully",
+            wallet,
+            gift: {
+                _id: claimedGift._id.toString(),
+                amount: claimedGift.amount,
+                note: claimedGift.note || "",
+            },
+        });
+    }
+    catch (error) {
+        console.error("CLAIM ADMIN GIFT ERROR:", error);
+        return res.status(500).json({
+            message: error?.message || "Failed to claim admin gift",
+        });
+    }
+    finally {
+        await dbSession?.endSession();
     }
 };
 export const deleteAccount = async (req, res) => {
