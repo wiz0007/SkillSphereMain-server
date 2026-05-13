@@ -9,6 +9,8 @@ const WalletTransactionSchema = new Schema({
         type: String,
         enum: [
             "recharge",
+            "admin_credit",
+            "admin_debit",
             "session_lock",
             "session_unlock",
             "session_spend",

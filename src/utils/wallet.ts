@@ -10,6 +10,8 @@ type WalletTransactionInput = {
   userId: mongoose.Types.ObjectId | string;
   type:
     | "recharge"
+    | "admin_credit"
+    | "admin_debit"
     | "session_lock"
     | "session_unlock"
     | "session_spend"
@@ -119,6 +121,44 @@ export const creditSkillCoins = async (
     userId: user._id,
     type: "recharge",
     amount,
+    balanceAfter: user.skillCoinBalance,
+    lockedAfter: user.lockedSkillCoins,
+    description,
+    ...(metadata?.sessionId ? { sessionId: metadata.sessionId } : {}),
+    ...(metadata?.courseId ? { courseId: metadata.courseId } : {}),
+    ...(metadata?.extra ? { metadata: metadata.extra } : {}),
+    ...(dbSession ? { dbSession } : {}),
+  });
+
+  return buildWalletSummary(user);
+};
+
+export const debitSkillCoins = async (
+  user: IUser,
+  amount: number,
+  description: string,
+  metadata?: {
+    sessionId?: mongoose.Types.ObjectId | string;
+    courseId?: mongoose.Types.ObjectId | string;
+    extra?: Record<string, unknown>;
+  },
+  dbSession?: mongoose.ClientSession
+) => {
+  if (amount <= 0) {
+    throw new Error("Amount must be greater than 0");
+  }
+
+  if (getAvailableSkillCoins(user) < amount) {
+    throw new Error("User does not have enough available SkillCoin");
+  }
+
+  user.skillCoinBalance = Math.max(0, user.skillCoinBalance - amount);
+  await user.save(dbSession ? { session: dbSession } : undefined);
+
+  await recordWalletTransaction({
+    userId: user._id,
+    type: "admin_debit",
+    amount: -amount,
     balanceAfter: user.skillCoinBalance,
     lockedAfter: user.lockedSkillCoins,
     description,

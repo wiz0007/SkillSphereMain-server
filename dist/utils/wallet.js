@@ -69,6 +69,29 @@ export const creditSkillCoins = async (user, amount, description, metadata, dbSe
     });
     return buildWalletSummary(user);
 };
+export const debitSkillCoins = async (user, amount, description, metadata, dbSession) => {
+    if (amount <= 0) {
+        throw new Error("Amount must be greater than 0");
+    }
+    if (getAvailableSkillCoins(user) < amount) {
+        throw new Error("User does not have enough available SkillCoin");
+    }
+    user.skillCoinBalance = Math.max(0, user.skillCoinBalance - amount);
+    await user.save(dbSession ? { session: dbSession } : undefined);
+    await recordWalletTransaction({
+        userId: user._id,
+        type: "admin_debit",
+        amount: -amount,
+        balanceAfter: user.skillCoinBalance,
+        lockedAfter: user.lockedSkillCoins,
+        description,
+        ...(metadata?.sessionId ? { sessionId: metadata.sessionId } : {}),
+        ...(metadata?.courseId ? { courseId: metadata.courseId } : {}),
+        ...(metadata?.extra ? { metadata: metadata.extra } : {}),
+        ...(dbSession ? { dbSession } : {}),
+    });
+    return buildWalletSummary(user);
+};
 export const lockSkillCoins = async (user, amount, description, metadata, dbSession, transactionType = "session_lock") => {
     if (getAvailableSkillCoins(user) < amount) {
         throw new Error("Insufficient SkillCoin balance");

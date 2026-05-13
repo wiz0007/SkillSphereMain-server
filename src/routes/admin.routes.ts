@@ -1,5 +1,7 @@
 import express from "express";
 import {
+  adjustAdminUserSkillCoins,
+  deleteAdminUser,
   deleteAdminCourse,
   deleteAdminReview,
   getAdminCourses,
@@ -21,6 +23,8 @@ router.use(protect, adminOnly);
 
 router.get("/overview", getAdminOverview);
 router.get("/users", getAdminUsers);
+router.patch("/users/:id/wallet", adjustAdminUserSkillCoins);
+router.delete("/users/:id", deleteAdminUser);
 router.get("/courses", getAdminCourses);
 router.patch("/courses/:id/publish", updateAdminCoursePublishStatus);
 router.delete("/courses/:id", deleteAdminCourse);

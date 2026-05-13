@@ -4,6 +4,8 @@ export interface IWalletTransaction extends Document {
   user: mongoose.Types.ObjectId;
   type:
     | "recharge"
+    | "admin_credit"
+    | "admin_debit"
     | "session_lock"
     | "session_unlock"
     | "session_spend"
@@ -43,6 +45,8 @@ const WalletTransactionSchema = new Schema<IWalletTransaction>(
       type: String,
       enum: [
         "recharge",
+        "admin_credit",
+        "admin_debit",
         "session_lock",
         "session_unlock",
         "session_spend",
