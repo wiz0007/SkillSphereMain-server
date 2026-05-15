@@ -35,4 +35,23 @@ export const supportUpload = multer({
     },
     fileFilter: supportFileFilter,
 });
+const VERIFICATION_ATTACHMENT_TYPES = new Set([
+    "image/jpeg",
+    "image/png",
+    "image/webp",
+    "application/pdf",
+]);
+const verificationFileFilter = (req, file, cb) => {
+    if (!VERIFICATION_ATTACHMENT_TYPES.has(file.mimetype)) {
+        return cb(new Error("Only JPG, PNG, WEBP, and PDF files are allowed"));
+    }
+    cb(null, true);
+};
+export const verificationUpload = multer({
+    storage,
+    limits: {
+        fileSize: 8 * 1024 * 1024,
+    },
+    fileFilter: verificationFileFilter,
+});
 //# sourceMappingURL=upload.js.map

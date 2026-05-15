@@ -1,55 +1,57 @@
 import express from "express";
 import {
+  becomeTutor,
   createProfile,
   getMyProfile,
-  uploadPhoto,
-  becomeTutor,
+  getPublicProfile,
   updateProfile,
-  getPublicProfile
+  uploadPhoto,
 } from "../controllers/profile.controller.js";
-
+import {
+  getVerificationSummary,
+  submitIdentityVerification,
+  submitTutorVerification,
+} from "../controllers/verification.controller.js";
 import { protect } from "../middlewares/protect.js";
-import { upload } from "../middlewares/upload.js";
+import { upload, verificationUpload } from "../middlewares/upload.js";
 import { validate } from "../middlewares/validate.js";
-
-import {createProfileSchema, tutorSchema, updateProfileSchema} from "../validators/profile.validator.js";
+import {
+  createProfileSchema,
+  tutorSchema,
+  updateProfileSchema,
+} from "../validators/profile.validator.js";
 
 const router = express.Router();
 
-/* ================= CREATE PROFILE ================= */
-router.post(
-  "/",
-  protect,
-  validate(createProfileSchema), // ✅ validation added
-  createProfile
-);
-
-/* ================= GET PROFILE ================= */
+router.post("/", protect, validate(createProfileSchema), createProfile);
 router.get("/me", protect, getMyProfile);
-
-/* ================= UPLOAD PHOTO ================= */
 router.post(
   "/upload-photo",
-  protect, // ✅ FIXED (IMPORTANT)
+  protect,
   upload.single("profilePhoto"),
   uploadPhoto
 );
+router.post("/become-tutor", protect, validate(tutorSchema), becomeTutor);
+router.put("/", protect, validate(updateProfileSchema), updateProfile);
 
-/* ================= BECOME TUTOR ================= */
+router.get("/verification", protect, getVerificationSummary);
 router.post(
-  "/become-tutor",
+  "/verification/identity",
   protect,
-  validate(tutorSchema), // ✅ validation added
-  becomeTutor
+  verificationUpload.fields([
+    { name: "documentFront", maxCount: 1 },
+    { name: "documentBack", maxCount: 1 },
+    { name: "selfie", maxCount: 1 },
+  ]),
+  submitIdentityVerification
 );
-
-/* ================= UPDATE PROFILE ================= */
-router.put(
-  "/",
+router.post(
+  "/verification/tutor",
   protect,
-  validate(updateProfileSchema), // ✅ validation added
-  updateProfile
+  verificationUpload.fields([{ name: "supportingDocument", maxCount: 1 }]),
+  submitTutorVerification
 );
 
 router.get("/public/:userId", getPublicProfile);
+
 export default router;

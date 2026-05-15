@@ -5,6 +5,9 @@ export interface IUser extends Document {
     password: string;
     profileCompleted: boolean;
     isVerified: boolean;
+    identityVerificationStatus: "not_started" | "pending" | "approved" | "rejected" | "resubmission_required";
+    tutorVerificationStatus: "not_started" | "pending" | "approved" | "rejected" | "resubmission_required";
+    verifiedBadgeLevel: "none" | "basic" | "identity" | "tutor";
     otp?: string | null;
     otpExpires?: Date | null;
     otpAttempts: number;

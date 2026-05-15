@@ -5,8 +5,20 @@ export interface IUser extends Document {
   email: string;
   password: string;
   profileCompleted: boolean;
-
   isVerified: boolean;
+  identityVerificationStatus:
+    | "not_started"
+    | "pending"
+    | "approved"
+    | "rejected"
+    | "resubmission_required";
+  tutorVerificationStatus:
+    | "not_started"
+    | "pending"
+    | "approved"
+    | "rejected"
+    | "resubmission_required";
+  verifiedBadgeLevel: "none" | "basic" | "identity" | "tutor";
 
   otp?: string | null;
   otpExpires?: Date | null;
@@ -49,6 +61,36 @@ const UserSchema = new Schema<IUser>(
     isVerified: {
       type: Boolean,
       default: false,
+    },
+
+    identityVerificationStatus: {
+      type: String,
+      enum: [
+        "not_started",
+        "pending",
+        "approved",
+        "rejected",
+        "resubmission_required",
+      ],
+      default: "not_started",
+    },
+
+    tutorVerificationStatus: {
+      type: String,
+      enum: [
+        "not_started",
+        "pending",
+        "approved",
+        "rejected",
+        "resubmission_required",
+      ],
+      default: "not_started",
+    },
+
+    verifiedBadgeLevel: {
+      type: String,
+      enum: ["none", "basic", "identity", "tutor"],
+      default: "none",
     },
 
     /* OTP */

@@ -19,6 +19,10 @@ import {
 import { adminOnly } from "../middlewares/adminOnly.js";
 import { protect } from "../middlewares/protect.js";
 import { supportUpload } from "../middlewares/upload.js";
+import {
+  getAdminVerificationRequests,
+  reviewVerificationRequest,
+} from "../controllers/verification.controller.js";
 
 const router = express.Router();
 
@@ -32,6 +36,8 @@ router.get("/courses", getAdminCourses);
 router.patch("/courses/:id/publish", updateAdminCoursePublishStatus);
 router.delete("/courses/:id", deleteAdminCourse);
 router.get("/sessions", getAdminSessions);
+router.get("/verifications", getAdminVerificationRequests);
+router.patch("/verifications/:id/review", reviewVerificationRequest);
 router.get("/support", getAdminSupportConversations);
 router.get("/support/:id/messages", getAdminSupportMessages);
 router.post(
