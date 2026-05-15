@@ -9,6 +9,7 @@ import {
   getAdminReviews,
   getAdminSessions,
   getAdminSupportConversations,
+  getAdminSupportMessages,
   getAdminUsers,
   getAdminWalletTransactions,
   updateAdminCoursePublishStatus,
@@ -30,6 +31,7 @@ router.patch("/courses/:id/publish", updateAdminCoursePublishStatus);
 router.delete("/courses/:id", deleteAdminCourse);
 router.get("/sessions", getAdminSessions);
 router.get("/support", getAdminSupportConversations);
+router.get("/support/:id/messages", getAdminSupportMessages);
 router.patch("/support/:id/status", updateAdminSupportStatus);
 router.get("/reviews", getAdminReviews);
 router.delete("/reviews/:id", deleteAdminReview);
