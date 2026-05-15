@@ -26,6 +26,33 @@ const UserSchema = new Schema({
         type: Boolean,
         default: false,
     },
+    identityVerificationStatus: {
+        type: String,
+        enum: [
+            "not_started",
+            "pending",
+            "approved",
+            "rejected",
+            "resubmission_required",
+        ],
+        default: "not_started",
+    },
+    tutorVerificationStatus: {
+        type: String,
+        enum: [
+            "not_started",
+            "pending",
+            "approved",
+            "rejected",
+            "resubmission_required",
+        ],
+        default: "not_started",
+    },
+    verifiedBadgeLevel: {
+        type: String,
+        enum: ["none", "basic", "identity", "tutor"],
+        default: "none",
+    },
     /* OTP */
     otp: String,
     otpExpires: Date,

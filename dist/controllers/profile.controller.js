@@ -22,6 +22,9 @@ const normalizeMode = (mode) => {
 const mergeUserAndProfile = (user, profile) => ({
     ...toSafeUser(user),
     ...profile,
+    identityVerificationStatus: user.identityVerificationStatus || "not_started",
+    tutorVerificationStatus: user.tutorVerificationStatus || "not_started",
+    verifiedBadgeLevel: user.verifiedBadgeLevel || "none",
 });
 export const createProfile = async (req, res) => {
     try {

@@ -84,6 +84,9 @@ const toSafeUser = (user, profile) => {
         isTutor: profile?.isTutor || false,
         profilePhoto: profile?.profilePhoto || "",
         isAdmin: Boolean(user.isAdmin),
+        identityVerificationStatus: user.identityVerificationStatus || "not_started",
+        tutorVerificationStatus: user.tutorVerificationStatus || "not_started",
+        verifiedBadgeLevel: user.verifiedBadgeLevel || "none",
         ...buildWalletSummary(user),
     };
 };
