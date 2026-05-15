@@ -72,6 +72,25 @@ const serializeUser = (user: any, profileMap: Map<string, any>) => {
   };
 };
 
+const serializeSupportMessage = (
+  message: any,
+  profileMap: Map<string, any>
+) => ({
+  _id: message._id.toString(),
+  text: message.text,
+  createdAt: message.createdAt,
+  readAt: message.readAt || null,
+  senderRole: message.senderRole,
+  sender: serializeUser(message.sender, profileMap),
+  attachment: message.attachmentUrl
+    ? {
+        url: message.attachmentUrl,
+        name: message.attachmentName || "Attachment",
+        mimeType: message.attachmentMimeType || "",
+      }
+    : null,
+});
+
 const syncCourseRatings = async (courseId: mongoose.Types.ObjectId | string) => {
   const summary = await CourseReview.aggregate<{
     totalRatings: number;
@@ -558,6 +577,58 @@ export const getAdminSupportConversations: RequestHandler = async (_req, res) =>
   } catch (error: any) {
     console.error("ADMIN SUPPORT ERROR:", error);
     return res.status(500).json({ message: "Failed to fetch support threads" });
+  }
+};
+
+export const getAdminSupportMessages: RequestHandler = async (req, res) => {
+  try {
+    const id = getId(req.params.id);
+
+    if (!isValidObjectId(id)) {
+      return res.status(400).json({ message: "Invalid support thread ID" });
+    }
+
+    const conversation = await SupportConversation.findById(id)
+      .populate("requester", "username email isAdmin")
+      .populate("assignedTo", "username email isAdmin")
+      .lean();
+
+    if (!conversation) {
+      return res.status(404).json({ message: "Support conversation not found" });
+    }
+
+    const messages = await SupportMessage.find({ conversation: conversation._id })
+      .populate("sender", "username email isAdmin")
+      .sort({ createdAt: 1 })
+      .lean();
+
+    const userIds = [
+      conversation.requester?._id?.toString?.() || "",
+      conversation.assignedTo?._id?.toString?.() || "",
+      ...messages.map((message) => message.sender?._id?.toString?.() || ""),
+    ];
+    const profileMap = await getProfileMap(userIds);
+
+    return res.json({
+      conversation: {
+        _id: conversation._id.toString(),
+        topic: conversation.topic,
+        subject: conversation.subject,
+        status: conversation.status,
+        lastMessageAt: conversation.lastMessageAt,
+        createdAt: (conversation as any).createdAt,
+        requester: serializeUser(conversation.requester, profileMap),
+        assignedTo: conversation.assignedTo
+          ? serializeUser(conversation.assignedTo, profileMap)
+          : null,
+      },
+      messages: messages.map((message) =>
+        serializeSupportMessage(message, profileMap)
+      ),
+    });
+  } catch (error: any) {
+    console.error("ADMIN SUPPORT MESSAGES ERROR:", error);
+    return res.status(500).json({ message: "Failed to fetch support messages" });
   }
 };
 
