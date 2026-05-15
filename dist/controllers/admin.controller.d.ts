@@ -10,6 +10,7 @@ export declare const getAdminSessions: RequestHandler;
 export declare const getAdminSupportConversations: RequestHandler;
 export declare const getAdminSupportMessages: RequestHandler;
 export declare const updateAdminSupportStatus: RequestHandler;
+export declare const sendAdminSupportMessage: RequestHandler;
 export declare const getAdminReviews: RequestHandler;
 export declare const deleteAdminReview: RequestHandler;
 export declare const getAdminWalletTransactions: RequestHandler;

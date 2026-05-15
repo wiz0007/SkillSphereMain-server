@@ -12,11 +12,13 @@ import {
   getAdminSupportMessages,
   getAdminUsers,
   getAdminWalletTransactions,
+  sendAdminSupportMessage,
   updateAdminCoursePublishStatus,
   updateAdminSupportStatus,
 } from "../controllers/admin.controller.js";
 import { adminOnly } from "../middlewares/adminOnly.js";
 import { protect } from "../middlewares/protect.js";
+import { supportUpload } from "../middlewares/upload.js";
 
 const router = express.Router();
 
@@ -32,6 +34,11 @@ router.delete("/courses/:id", deleteAdminCourse);
 router.get("/sessions", getAdminSessions);
 router.get("/support", getAdminSupportConversations);
 router.get("/support/:id/messages", getAdminSupportMessages);
+router.post(
+  "/support/:id/messages",
+  supportUpload.single("attachment"),
+  sendAdminSupportMessage
+);
 router.patch("/support/:id/status", updateAdminSupportStatus);
 router.get("/reviews", getAdminReviews);
 router.delete("/reviews/:id", deleteAdminReview);
