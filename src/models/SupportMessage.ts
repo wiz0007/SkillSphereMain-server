@@ -7,6 +7,9 @@ export interface ISupportMessage extends Document {
   sender: mongoose.Types.ObjectId;
   senderRole: SupportSenderRole;
   text: string;
+  attachmentUrl?: string | null;
+  attachmentName?: string | null;
+  attachmentMimeType?: string | null;
   readAt?: Date | null;
 }
 
@@ -33,6 +36,23 @@ const SupportMessageSchema = new Schema<ISupportMessage>(
       required: true,
       trim: true,
       maxlength: 3000,
+    },
+    attachmentUrl: {
+      type: String,
+      default: null,
+      trim: true,
+    },
+    attachmentName: {
+      type: String,
+      default: null,
+      trim: true,
+      maxlength: 180,
+    },
+    attachmentMimeType: {
+      type: String,
+      default: null,
+      trim: true,
+      maxlength: 120,
     },
     readAt: {
       type: Date,
