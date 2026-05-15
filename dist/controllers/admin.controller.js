@@ -12,7 +12,8 @@ import SupportMessage from "../models/SupportMessage.js";
 import User from "../models/User.js";
 import WalletRechargeOrder from "../models/WalletRechargeOrder.js";
 import WalletTransaction from "../models/WalletTransaction.js";
-import { emitNotification, emitWalletUpdate } from "../config/socket.js";
+import cloudinary from "../config/cloudinary.js";
+import { emitNotification, emitSupportMessage, emitWalletUpdate } from "../config/socket.js";
 import { logActivity } from "../utils/activityLogger.js";
 import { debitSkillCoins } from "../utils/wallet.js";
 const isValidObjectId = (id) => mongoose.Types.ObjectId.isValid(id);
@@ -77,6 +78,20 @@ const serializeSupportMessage = (message, profileMap) => ({
         }
         : null,
 });
+const uploadSupportAttachment = async (file) => {
+    if (!file) {
+        return null;
+    }
+    const result = await cloudinary.uploader.upload(file.path, {
+        resource_type: "auto",
+        folder: "skillsphere/support",
+    });
+    return {
+        url: result.secure_url,
+        name: file.originalname,
+        mimeType: file.mimetype,
+    };
+};
 const syncCourseRatings = async (courseId) => {
     const summary = await CourseReview.aggregate([
         {
@@ -545,6 +560,96 @@ export const updateAdminSupportStatus = async (req, res) => {
     catch (error) {
         console.error("ADMIN SUPPORT STATUS ERROR:", error);
         return res.status(500).json({ message: "Failed to update support status" });
+    }
+};
+export const sendAdminSupportMessage = async (req, res) => {
+    try {
+        const id = getId(req.params.id);
+        const senderId = req.userId;
+        const text = String(req.body.text || "").trim();
+        const attachment = await uploadSupportAttachment(req.file);
+        if (!senderId) {
+            return res.status(401).json({ message: "Unauthorized" });
+        }
+        if (!isValidObjectId(id)) {
+            return res.status(400).json({ message: "Invalid support thread ID" });
+        }
+        if (!text && !attachment) {
+            return res.status(400).json({
+                message: "Reply text or an attachment is required",
+            });
+        }
+        const conversation = await SupportConversation.findById(id)
+            .populate("requester", "username email isAdmin")
+            .populate("assignedTo", "username email isAdmin");
+        if (!conversation) {
+            return res.status(404).json({ message: "Support conversation not found" });
+        }
+        const message = await SupportMessage.create({
+            conversation: conversation._id,
+            sender: new mongoose.Types.ObjectId(senderId),
+            senderRole: "support",
+            text,
+            attachmentUrl: attachment?.url || null,
+            attachmentName: attachment?.name || null,
+            attachmentMimeType: attachment?.mimeType || null,
+        });
+        if (!conversation.assignedTo) {
+            conversation.assignedTo = new mongoose.Types.ObjectId(senderId);
+        }
+        conversation.status = "waiting_on_user";
+        conversation.lastMessageAt = new Date();
+        await conversation.save();
+        const populatedMessage = await SupportMessage.findById(message._id)
+            .populate("sender", "username email isAdmin")
+            .lean();
+        const populatedConversation = await SupportConversation.findById(conversation._id)
+            .populate("requester", "username email isAdmin")
+            .populate("assignedTo", "username email isAdmin")
+            .lean();
+        const requesterId = populatedConversation?.requester?._id?.toString?.() ||
+            populatedConversation?.requester?.toString?.() ||
+            "";
+        const assignedId = populatedConversation?.assignedTo?._id?.toString?.() ||
+            populatedConversation?.assignedTo?.toString?.() ||
+            "";
+        const profileMap = await getProfileMap([
+            senderId,
+            requesterId,
+            assignedId,
+        ]);
+        const conversationPayload = {
+            _id: populatedConversation._id.toString(),
+            topic: populatedConversation.topic,
+            subject: populatedConversation.subject,
+            status: populatedConversation.status,
+            lastMessageAt: populatedConversation.lastMessageAt,
+            createdAt: populatedConversation.createdAt,
+            requester: serializeUser(populatedConversation.requester, profileMap),
+            assignedTo: populatedConversation.assignedTo
+                ? serializeUser(populatedConversation.assignedTo, profileMap)
+                : null,
+        };
+        const messagePayload = serializeSupportMessage(populatedMessage, profileMap);
+        [requesterId, assignedId]
+            .filter((recipientId) => recipientId && recipientId !== senderId)
+            .forEach((recipientId) => {
+            emitSupportMessage(recipientId, {
+                conversation: conversationPayload,
+                message: {
+                    ...messagePayload,
+                    isMine: false,
+                },
+            });
+        });
+        return res.status(201).json({
+            conversation: conversationPayload,
+            message: messagePayload,
+        });
+    }
+    catch (error) {
+        console.error("ADMIN SEND SUPPORT MESSAGE ERROR:", error);
+        return res.status(500).json({ message: "Failed to send support reply" });
     }
 };
 export const getAdminReviews = async (_req, res) => {
