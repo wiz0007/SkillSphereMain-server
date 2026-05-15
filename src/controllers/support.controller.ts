@@ -1,5 +1,6 @@
 import type { RequestHandler } from "express";
 import mongoose from "mongoose";
+import cloudinary from "../config/cloudinary.js";
 import Profile from "../models/Profile.js";
 import SupportConversation from "../models/SupportConversation.js";
 import SupportMessage from "../models/SupportMessage.js";
@@ -115,10 +116,35 @@ const serializeMessage = (
   readAt: message.readAt || null,
   senderRole: message.senderRole,
   sender: serializeUser(message.sender, profileMap),
+  attachment:
+    message.attachmentUrl
+      ? {
+          url: message.attachmentUrl,
+          name: message.attachmentName || "Attachment",
+          mimeType: message.attachmentMimeType || "",
+        }
+      : null,
   isMine:
     (message.sender?._id?.toString?.() || message.sender?.toString?.()) ===
     currentUserId,
 });
+
+const uploadSupportAttachment = async (file?: Express.Multer.File) => {
+  if (!file) {
+    return null;
+  }
+
+  const result = await cloudinary.uploader.upload(file.path, {
+    resource_type: "auto",
+    folder: "skillsphere/support",
+  });
+
+  return {
+    url: result.secure_url,
+    name: file.originalname,
+    mimeType: file.mimetype,
+  };
+};
 
 const getFirstAvailableExecutiveId = async () => {
   const emails = getSupportExecutiveEmails();
@@ -255,14 +281,15 @@ export const createSupportConversation: RequestHandler = async (req, res) => {
     const topic = String(req.body.topic || "").trim();
     const subject = String(req.body.subject || "").trim();
     const text = String(req.body.text || "").trim();
+    const attachment = await uploadSupportAttachment(req.file);
 
     if (!userId) {
       return res.status(401).json({ message: "Unauthorized" });
     }
 
-    if (!topic || !subject || !text) {
+    if (!topic || !subject || (!text && !attachment)) {
       return res.status(400).json({
-        message: "Topic, subject, and message are required",
+        message: "Topic, subject, and either a message or attachment are required",
       });
     }
 
@@ -284,6 +311,9 @@ export const createSupportConversation: RequestHandler = async (req, res) => {
       sender: new mongoose.Types.ObjectId(userId),
       senderRole: "user",
       text,
+      attachmentUrl: attachment?.url || null,
+      attachmentName: attachment?.name || null,
+      attachmentMimeType: attachment?.mimeType || null,
     });
 
     const populatedConversation = await SupportConversation.findById(
@@ -392,6 +422,7 @@ export const sendSupportMessage: RequestHandler = async (req, res) => {
     const { userId } = req;
     const conversationId = getId(req.params.conversationId);
     const text = String(req.body.text || "").trim();
+    const attachment = await uploadSupportAttachment(req.file);
 
     if (!userId) {
       return res.status(401).json({ message: "Unauthorized" });
@@ -403,8 +434,10 @@ export const sendSupportMessage: RequestHandler = async (req, res) => {
         .json({ message: "Invalid conversationId" });
     }
 
-    if (!text) {
-      return res.status(400).json({ message: "Message text is required" });
+    if (!text && !attachment) {
+      return res
+        .status(400)
+        .json({ message: "Message text or an attachment is required" });
     }
 
     const { executive, conversation } = await getConversationOrThrow(
@@ -428,6 +461,9 @@ export const sendSupportMessage: RequestHandler = async (req, res) => {
       sender: new mongoose.Types.ObjectId(userId),
       senderRole,
       text,
+      attachmentUrl: attachment?.url || null,
+      attachmentName: attachment?.name || null,
+      attachmentMimeType: attachment?.mimeType || null,
     });
 
     conversation.status = nextStatus;

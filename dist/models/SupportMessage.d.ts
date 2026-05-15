@@ -5,6 +5,9 @@ export interface ISupportMessage extends Document {
     sender: mongoose.Types.ObjectId;
     senderRole: SupportSenderRole;
     text: string;
+    attachmentUrl?: string | null;
+    attachmentName?: string | null;
+    attachmentMimeType?: string | null;
     readAt?: Date | null;
 }
 declare const _default: mongoose.Model<ISupportMessage, {}, {}, {}, mongoose.Document<unknown, {}, ISupportMessage, {}, mongoose.DefaultSchemaOptions> & ISupportMessage & Required<{
