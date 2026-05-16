@@ -4,6 +4,7 @@ import Session from "../models/Session.js";
 import Profile from "../models/Profile.js";
 import Course from "../models/Course.js";
 import User from "../models/User.js";
+import TuitionEnrollment from "../models/TuitionEnrollment.js";
 import { logActivity } from "../utils/activityLogger.js";
 import { emitNotification, emitWalletUpdate } from "../config/socket.js";
 import {
@@ -12,6 +13,7 @@ import {
   settleLockedSkillCoins,
   unlockSkillCoins,
 } from "../utils/wallet.js";
+import { ensureTuitionSessionsGenerated } from "../utils/tuition.js";
 
 const isValidObjectId = (id: string) => mongoose.Types.ObjectId.isValid(id);
 
@@ -82,6 +84,18 @@ export const createSession: RequestHandler = async (req, res) => {
     const course = await Course.findById(courseId).session(dbSession);
     if (!course) {
       return res.status(404).json({ message: "Course not found" });
+    }
+
+    if (course.type === "recorded") {
+      return res.status(400).json({
+        message: "Recorded courses use the unlock flow instead of live session booking.",
+      });
+    }
+
+    if (course.type === "tuition") {
+      return res.status(400).json({
+        message: "Recurring tuition plans use tuition enrollment instead of one-off session booking.",
+      });
     }
 
     const tutorId = course.tutor;
@@ -167,6 +181,8 @@ export const createSession: RequestHandler = async (req, res) => {
             skillCoinAmount,
             coinStatus: "locked",
             status: "pending",
+            sessionKind: "single",
+            billingType: "pay_per_session",
           },
         ],
         { session: dbSession! }
@@ -219,6 +235,23 @@ export const getMySessions: RequestHandler = async (req, res) => {
     const userObjectId = new mongoose.Types.ObjectId(userId);
 
     await releaseExpiredPendingSessionLocks();
+
+    const tuitionEnrollments = await TuitionEnrollment.find({
+      status: "approved",
+      $or: [{ student: userObjectId }, { tutor: userObjectId }],
+    }).session(null);
+
+    for (const enrollment of tuitionEnrollments) {
+      const course = await Course.findById(enrollment.course)
+        .select("title")
+        .session(null);
+
+      if (!course) {
+        continue;
+      }
+
+      await ensureTuitionSessionsGenerated({ enrollment, course });
+    }
 
     const sessions = await Session.find({
       hiddenFor: { $ne: userObjectId },
@@ -390,30 +423,37 @@ export const confirmSessionCompletion: RequestHandler = async (req, res) => {
     }
 
     await dbSession.withTransaction(async () => {
-      await settleLockedSkillCoins({
-        student,
-        tutor,
-        amount: session.skillCoinAmount,
-        sessionId: session._id,
-        ...(session.course ? { courseId: session.course } : {}),
-        description: `SkillCoin settled for session: ${session.title}`,
-        dbSession: dbSession!,
-      });
+      if (session.sessionKind !== "tuition") {
+        await settleLockedSkillCoins({
+          student,
+          tutor,
+          amount: session.skillCoinAmount,
+          sessionId: session._id,
+          ...(session.course ? { courseId: session.course } : {}),
+          description: `SkillCoin settled for session: ${session.title}`,
+          dbSession: dbSession!,
+        });
+      }
 
       session.studentConfirmedCompletionAt = new Date();
       session.coinStatus = "settled";
       await session.save({ session: dbSession! });
     });
 
-    emitWalletUpdate(student._id.toString(), buildWalletSummary(student));
-    emitWalletUpdate(tutor._id.toString(), buildWalletSummary(tutor));
+    if (session.sessionKind !== "tuition") {
+      emitWalletUpdate(student._id.toString(), buildWalletSummary(student));
+      emitWalletUpdate(tutor._id.toString(), buildWalletSummary(tutor));
+    }
 
     const notification = await logActivity({
       user: session.tutor.toString(),
       type: "SESSION",
       action: "CONFIRMED",
       entityId: session._id.toString(),
-      message: "Student confirmed completion. SkillCoin released.",
+      message:
+        session.sessionKind === "tuition"
+          ? "Student confirmed the tuition class as completed."
+          : "Student confirmed completion. SkillCoin released.",
     });
 
     emitNotification(session.tutor.toString(), notification);

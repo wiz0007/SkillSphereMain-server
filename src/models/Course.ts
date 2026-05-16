@@ -4,12 +4,17 @@ export interface ICourse extends Document {
   tutor: mongoose.Types.ObjectId;
   title: string;
   description: string;
-  type: "live" | "recorded";
+  type: "live" | "recorded" | "tuition";
   category: string;
   skills: string[];
   price: number;
   duration: string;
   contentDriveLink?: string;
+  tuitionSchedule?: {
+    days: string[];
+    weeks: number[];
+    startTime: string;
+  };
   level: "Beginner" | "Intermediate" | "Advanced";
   isPublished: boolean;
   averageRating: number;
@@ -17,6 +22,25 @@ export interface ICourse extends Document {
   reviewRefs: mongoose.Types.ObjectId[];
   savedBy: mongoose.Types.ObjectId[];
 }
+
+const TuitionScheduleSchema = new Schema(
+  {
+    days: {
+      type: [String],
+      default: [],
+    },
+    weeks: {
+      type: [Number],
+      default: [],
+    },
+    startTime: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+  },
+  { _id: false }
+);
 
 const CourseSchema = new Schema<ICourse>(
   {
@@ -36,7 +60,7 @@ const CourseSchema = new Schema<ICourse>(
     },
     type: {
       type: String,
-      enum: ["live", "recorded"],
+      enum: ["live", "recorded", "tuition"],
       default: "live",
     },
     category: String,
@@ -50,6 +74,14 @@ const CourseSchema = new Schema<ICourse>(
       type: String,
       default: "",
       trim: true,
+    },
+    tuitionSchedule: {
+      type: TuitionScheduleSchema,
+      default: () => ({
+        days: [],
+        weeks: [],
+        startTime: "",
+      }),
     },
     level: {
       type: String,

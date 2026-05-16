@@ -1,4 +1,19 @@
 import mongoose, { Document, Schema } from "mongoose";
+const TuitionScheduleSchema = new Schema({
+    days: {
+        type: [String],
+        default: [],
+    },
+    weeks: {
+        type: [Number],
+        default: [],
+    },
+    startTime: {
+        type: String,
+        default: "",
+        trim: true,
+    },
+}, { _id: false });
 const CourseSchema = new Schema({
     tutor: {
         type: Schema.Types.ObjectId,
@@ -16,7 +31,7 @@ const CourseSchema = new Schema({
     },
     type: {
         type: String,
-        enum: ["live", "recorded"],
+        enum: ["live", "recorded", "tuition"],
         default: "live",
     },
     category: String,
@@ -30,6 +45,14 @@ const CourseSchema = new Schema({
         type: String,
         default: "",
         trim: true,
+    },
+    tuitionSchedule: {
+        type: TuitionScheduleSchema,
+        default: () => ({
+            days: [],
+            weeks: [],
+            startTime: "",
+        }),
     },
     level: {
         type: String,

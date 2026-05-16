@@ -4,6 +4,10 @@ const SessionSchema = new Schema({
         type: Schema.Types.ObjectId,
         ref: "Course",
     },
+    tuitionEnrollment: {
+        type: Schema.Types.ObjectId,
+        ref: "TuitionEnrollment",
+    },
     student: {
         type: Schema.Types.ObjectId,
         ref: "User",
@@ -40,6 +44,16 @@ const SessionSchema = new Schema({
         type: String,
         enum: ["locked", "released", "settled"],
         default: "locked",
+    },
+    sessionKind: {
+        type: String,
+        enum: ["single", "tuition"],
+        default: "single",
+    },
+    billingType: {
+        type: String,
+        enum: ["pay_per_session", "included_in_tuition"],
+        default: "pay_per_session",
     },
     price: { type: Number, required: true },
 }, { timestamps: true });

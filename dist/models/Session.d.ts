@@ -1,6 +1,7 @@
 import mongoose, { Document } from "mongoose";
 export interface ISession extends Document {
     course?: mongoose.Types.ObjectId;
+    tuitionEnrollment?: mongoose.Types.ObjectId;
     student: mongoose.Types.ObjectId;
     tutor: mongoose.Types.ObjectId;
     title: string;
@@ -13,6 +14,8 @@ export interface ISession extends Document {
     hiddenFor: mongoose.Types.ObjectId[];
     skillCoinAmount: number;
     coinStatus: "locked" | "released" | "settled";
+    sessionKind: "single" | "tuition";
+    billingType: "pay_per_session" | "included_in_tuition";
     status: "pending" | "accepted" | "completed" | "cancelled";
     price: number;
 }

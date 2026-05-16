@@ -2,6 +2,7 @@ import mongoose, { Schema, Document } from "mongoose";
 
 export interface ISession extends Document {
   course?: mongoose.Types.ObjectId;
+  tuitionEnrollment?: mongoose.Types.ObjectId;
   student: mongoose.Types.ObjectId;
   tutor: mongoose.Types.ObjectId;
 
@@ -16,6 +17,8 @@ export interface ISession extends Document {
   hiddenFor: mongoose.Types.ObjectId[];
   skillCoinAmount: number;
   coinStatus: "locked" | "released" | "settled";
+  sessionKind: "single" | "tuition";
+  billingType: "pay_per_session" | "included_in_tuition";
 
   status: "pending" | "accepted" | "completed" | "cancelled";
 
@@ -27,6 +30,10 @@ const SessionSchema = new Schema<ISession>(
     course: {
       type: Schema.Types.ObjectId,
       ref: "Course",
+    },
+    tuitionEnrollment: {
+      type: Schema.Types.ObjectId,
+      ref: "TuitionEnrollment",
     },
     student: {
       type: Schema.Types.ObjectId,
@@ -70,6 +77,16 @@ const SessionSchema = new Schema<ISession>(
       type: String,
       enum: ["locked", "released", "settled"],
       default: "locked",
+    },
+    sessionKind: {
+      type: String,
+      enum: ["single", "tuition"],
+      default: "single",
+    },
+    billingType: {
+      type: String,
+      enum: ["pay_per_session", "included_in_tuition"],
+      default: "pay_per_session",
     },
 
     price: { type: Number, required: true },
