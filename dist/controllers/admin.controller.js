@@ -178,7 +178,7 @@ const deleteUserData = async (userId) => {
 };
 export const getAdminOverview = async (_req, res) => {
     try {
-        const [totalUsers, totalCourses, totalSessions, totalSupportThreads, totalReviews, totalWalletTransactions, totalTutors, pendingSupportThreads, pendingSessions, recordedCourses, liveCourses, recentUsers, recentActivities,] = await Promise.all([
+        const [totalUsers, totalCourses, totalSessions, totalSupportThreads, totalReviews, totalWalletTransactions, totalTutors, pendingSupportThreads, pendingSessions, recordedCourses, liveCourses, tuitionCourses, recentUsers, recentActivities,] = await Promise.all([
             User.countDocuments(),
             Course.countDocuments(),
             Session.countDocuments(),
@@ -192,6 +192,7 @@ export const getAdminOverview = async (_req, res) => {
             Session.countDocuments({ status: "pending" }),
             Course.countDocuments({ type: "recorded" }),
             Course.countDocuments({ type: "live" }),
+            Course.countDocuments({ type: "tuition" }),
             User.find()
                 .select("username email isAdmin profileCompleted isVerified skillCoinBalance lockedSkillCoins createdAt")
                 .sort({ createdAt: -1 })
@@ -210,6 +211,7 @@ export const getAdminOverview = async (_req, res) => {
                 totalCourses,
                 liveCourses,
                 recordedCourses,
+                tuitionCourses,
                 totalSessions,
                 pendingSessions,
                 totalSupportThreads,

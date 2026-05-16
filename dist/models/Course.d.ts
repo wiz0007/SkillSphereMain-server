@@ -3,12 +3,17 @@ export interface ICourse extends Document {
     tutor: mongoose.Types.ObjectId;
     title: string;
     description: string;
-    type: "live" | "recorded";
+    type: "live" | "recorded" | "tuition";
     category: string;
     skills: string[];
     price: number;
     duration: string;
     contentDriveLink?: string;
+    tuitionSchedule?: {
+        days: string[];
+        weeks: number[];
+        startTime: string;
+    };
     level: "Beginner" | "Intermediate" | "Advanced";
     isPublished: boolean;
     averageRating: number;

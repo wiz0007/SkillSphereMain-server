@@ -7,7 +7,7 @@ export const createCourseSchema = z.object({
 
   description: z.string().min(10),
 
-  type: z.enum(["live", "recorded"]).default("live"),
+  type: z.enum(["live", "recorded", "tuition"]).default("live"),
 
   category: z.string().min(2),
 
@@ -24,6 +24,14 @@ export const createCourseSchema = z.object({
 
   contentDriveLink: z.string().trim().optional().or(z.literal("")),
 
+  tuitionSchedule: z
+    .object({
+      days: z.array(z.string()).default([]),
+      weeks: z.array(z.number().int().min(1).max(5)).default([]),
+      startTime: z.string().trim().default(""),
+    })
+    .optional(),
+
   level: z.enum(["Beginner", "Intermediate", "Advanced"]),
 }).superRefine((data, ctx) => {
   if (data.type === "recorded" && !data.contentDriveLink?.trim()) {
@@ -32,6 +40,32 @@ export const createCourseSchema = z.object({
       path: ["contentDriveLink"],
       message: "Google Drive link is required for recorded courses",
     });
+  }
+
+  if (data.type === "tuition") {
+    if (!data.tuitionSchedule?.days?.length) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["tuitionSchedule", "days"],
+        message: "Select at least one tuition day",
+      });
+    }
+
+    if (!data.tuitionSchedule?.weeks?.length) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["tuitionSchedule", "weeks"],
+        message: "Select at least one week of the month",
+      });
+    }
+
+    if (!data.tuitionSchedule?.startTime?.trim()) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["tuitionSchedule", "startTime"],
+        message: "Choose a start time for the recurring tuition",
+      });
+    }
   }
 });
 

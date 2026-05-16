@@ -10,6 +10,10 @@ export interface IWalletTransaction extends Document {
     | "session_unlock"
     | "session_spend"
     | "session_earn"
+    | "tuition_lock"
+    | "tuition_unlock"
+    | "tuition_spend"
+    | "tuition_earn"
     | "recorded_course_lock"
     | "recorded_course_unlock"
     | "recorded_course_spend"
@@ -51,6 +55,10 @@ const WalletTransactionSchema = new Schema<IWalletTransaction>(
         "session_unlock",
         "session_spend",
         "session_earn",
+        "tuition_lock",
+        "tuition_unlock",
+        "tuition_spend",
+        "tuition_earn",
         "recorded_course_lock",
         "recorded_course_unlock",
         "recorded_course_spend",

@@ -5,12 +5,18 @@ export declare const createCourseSchema: z.ZodObject<{
     type: z.ZodDefault<z.ZodEnum<{
         live: "live";
         recorded: "recorded";
+        tuition: "tuition";
     }>>;
     category: z.ZodString;
     skills: z.ZodDefault<z.ZodArray<z.ZodString>>;
     price: z.ZodPipe<z.ZodUnion<readonly [z.ZodNumber, z.ZodString]>, z.ZodTransform<number, string | number>>;
     duration: z.ZodString;
     contentDriveLink: z.ZodUnion<[z.ZodOptional<z.ZodString>, z.ZodLiteral<"">]>;
+    tuitionSchedule: z.ZodOptional<z.ZodObject<{
+        days: z.ZodDefault<z.ZodArray<z.ZodString>>;
+        weeks: z.ZodDefault<z.ZodArray<z.ZodNumber>>;
+        startTime: z.ZodDefault<z.ZodString>;
+    }, z.core.$strip>>;
     level: z.ZodEnum<{
         Beginner: "Beginner";
         Intermediate: "Intermediate";

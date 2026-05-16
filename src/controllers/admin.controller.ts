@@ -223,6 +223,7 @@ export const getAdminOverview: RequestHandler = async (_req, res) => {
       pendingSessions,
       recordedCourses,
       liveCourses,
+      tuitionCourses,
       recentUsers,
       recentActivities,
     ] = await Promise.all([
@@ -239,6 +240,7 @@ export const getAdminOverview: RequestHandler = async (_req, res) => {
       Session.countDocuments({ status: "pending" }),
       Course.countDocuments({ type: "recorded" }),
       Course.countDocuments({ type: "live" }),
+      Course.countDocuments({ type: "tuition" }),
       User.find()
         .select("username email isAdmin profileCompleted isVerified skillCoinBalance lockedSkillCoins createdAt")
         .sort({ createdAt: -1 })
@@ -261,6 +263,7 @@ export const getAdminOverview: RequestHandler = async (_req, res) => {
         totalCourses,
         liveCourses,
         recordedCourses,
+        tuitionCourses,
         totalSessions,
         pendingSessions,
         totalSupportThreads,

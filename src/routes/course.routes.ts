@@ -2,15 +2,22 @@ import express from "express";
 import {
   addReview,
   approveRecordedCourseAccess,
+  approveTuitionEnrollment,
+  cancelTuitionEnrollment,
   createCourse,
   deleteCourse,
   getAllCourses,
   getCourseById,
   getMyCourses,
+  getMyTuitionEnrollments,
+  pauseTuitionEnrollment,
   getSavedCourses,
   rateCourse,
   rejectRecordedCourseAccess,
+  rejectTuitionEnrollment,
   requestRecordedCourseAccess,
+  requestTuitionEnrollment,
+  resumeTuitionEnrollment,
   saveCourse,
   toggleCoursePublishStatus,
   unsaveCourse,
@@ -32,10 +39,12 @@ router.get("/", getAllCourses);
 
 router.post("/", protect, validate(createCourseSchema), createCourse);
 router.get("/my", protect, getMyCourses);
+router.get("/tuition-enrollments/mine", protect, getMyTuitionEnrollments);
 router.get("/saved", protect, getSavedCourses);
 
 router.get("/:id", optionalAuth, getCourseById);
 router.post("/:id/recorded-access", protect, requestRecordedCourseAccess);
+router.post("/:id/tuition-enrollments", protect, requestTuitionEnrollment);
 router.put("/:id", protect, validate(createCourseSchema), updateCourse);
 router.patch("/:id/publish", protect, toggleCoursePublishStatus);
 router.delete("/:id", protect, deleteCourse);
@@ -49,6 +58,31 @@ router.patch(
   "/recorded-access/:accessId/reject",
   protect,
   rejectRecordedCourseAccess
+);
+router.patch(
+  "/tuition-enrollments/:enrollmentId/approve",
+  protect,
+  approveTuitionEnrollment
+);
+router.patch(
+  "/tuition-enrollments/:enrollmentId/reject",
+  protect,
+  rejectTuitionEnrollment
+);
+router.patch(
+  "/tuition-enrollments/:enrollmentId/pause",
+  protect,
+  pauseTuitionEnrollment
+);
+router.patch(
+  "/tuition-enrollments/:enrollmentId/resume",
+  protect,
+  resumeTuitionEnrollment
+);
+router.patch(
+  "/tuition-enrollments/:enrollmentId/cancel",
+  protect,
+  cancelTuitionEnrollment
 );
 
 router.post(

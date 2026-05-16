@@ -16,6 +16,10 @@ type WalletTransactionInput = {
     | "session_unlock"
     | "session_spend"
     | "session_earn"
+    | "tuition_lock"
+    | "tuition_unlock"
+    | "tuition_spend"
+    | "tuition_earn"
     | "recorded_course_lock"
     | "recorded_course_unlock"
     | "recorded_course_spend"
@@ -183,6 +187,7 @@ export const lockSkillCoins = async (
   dbSession?: mongoose.ClientSession,
   transactionType:
     | "session_lock"
+    | "tuition_lock"
     | "recorded_course_lock" = "session_lock"
 ) => {
   if (getAvailableSkillCoins(user) < amount) {
@@ -220,6 +225,7 @@ export const unlockSkillCoins = async (
   dbSession?: mongoose.ClientSession,
   transactionType:
     | "session_unlock"
+    | "tuition_unlock"
     | "recorded_course_unlock" = "session_unlock"
 ) => {
   user.lockedSkillCoins = Math.max(0, user.lockedSkillCoins - amount);
@@ -261,9 +267,11 @@ export const settleLockedSkillCoins = async ({
   dbSession?: mongoose.ClientSession;
   studentTransactionType?:
     | "session_spend"
+    | "tuition_spend"
     | "recorded_course_spend";
   tutorTransactionType?:
     | "session_earn"
+    | "tuition_earn"
     | "recorded_course_earn";
 }) => {
   if (student.lockedSkillCoins < amount || student.skillCoinBalance < amount) {
