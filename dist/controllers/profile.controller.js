@@ -301,10 +301,13 @@ export const getPublicProfile = async (req, res) => {
             });
         }
         const user = await User.findById(objectId)
-            .select("username profileCompleted")
+            .select("username profileCompleted identityVerificationStatus tutorVerificationStatus verifiedBadgeLevel")
             .lean();
         return res.json({
             username: user?.username,
+            identityVerificationStatus: user?.identityVerificationStatus || "not_started",
+            tutorVerificationStatus: user?.tutorVerificationStatus || "not_started",
+            verifiedBadgeLevel: user?.verifiedBadgeLevel || "none",
             ...profile,
         });
     }
