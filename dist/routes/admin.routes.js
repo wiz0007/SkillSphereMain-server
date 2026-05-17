@@ -3,7 +3,7 @@ import { adjustAdminUserSkillCoins, deleteAdminUser, deleteAdminCourse, deleteAd
 import { adminOnly } from "../middlewares/adminOnly.js";
 import { protect } from "../middlewares/protect.js";
 import { supportUpload } from "../middlewares/upload.js";
-import { getAdminVerificationRequests, reviewVerificationRequest, } from "../controllers/verification.controller.js";
+import { deverifyVerificationRequest, getAdminVerificationRequests, reviewVerificationRequest, } from "../controllers/verification.controller.js";
 const router = express.Router();
 router.use(protect, adminOnly);
 router.get("/overview", getAdminOverview);
@@ -16,6 +16,7 @@ router.delete("/courses/:id", deleteAdminCourse);
 router.get("/sessions", getAdminSessions);
 router.get("/verifications", getAdminVerificationRequests);
 router.patch("/verifications/:id/review", reviewVerificationRequest);
+router.patch("/verifications/:id/deverify", deverifyVerificationRequest);
 router.get("/support", getAdminSupportConversations);
 router.get("/support/:id/messages", getAdminSupportMessages);
 router.post("/support/:id/messages", supportUpload.single("attachment"), sendAdminSupportMessage);

@@ -82,6 +82,21 @@ const VerificationRequestSchema = new Schema({
         type: Date,
         default: null,
     },
+    revokedBy: {
+        type: Schema.Types.ObjectId,
+        ref: "User",
+        default: null,
+    },
+    revokedAt: {
+        type: Date,
+        default: null,
+    },
+    revocationNote: {
+        type: String,
+        default: "",
+        trim: true,
+        maxlength: 1000,
+    },
 }, { timestamps: true });
 VerificationRequestSchema.index({ user: 1, type: 1, createdAt: -1 });
 export default mongoose.model("VerificationRequest", VerificationRequestSchema);

@@ -65,6 +65,10 @@ const serializeUser = (value, profileMap) => {
         _id: id,
         username: value?.username || "",
         email: value?.email || "",
+        isAdmin: Boolean(value?.isAdmin),
+        identityVerificationStatus: value?.identityVerificationStatus || "not_started",
+        tutorVerificationStatus: value?.tutorVerificationStatus || "not_started",
+        verifiedBadgeLevel: value?.verifiedBadgeLevel || "none",
         fullName: profile?.fullName || "",
         profilePhoto: profile?.profilePhoto || "",
         isTutor: profile?.isTutor || false,
@@ -138,8 +142,8 @@ const markConversationRead = async (conversationId, viewerId) => {
 const getConversationOrThrow = async (conversationId, userId) => {
     const executive = await isSupportExecutive(userId);
     const conversation = await SupportConversation.findById(conversationId)
-        .populate("requester", "username email")
-        .populate("assignedTo", "username email");
+        .populate("requester", "username email isAdmin identityVerificationStatus tutorVerificationStatus verifiedBadgeLevel")
+        .populate("assignedTo", "username email isAdmin identityVerificationStatus tutorVerificationStatus verifiedBadgeLevel");
     if (!conversation) {
         return { executive, conversation: null };
     }
@@ -166,8 +170,8 @@ export const getSupportBootstrap = async (req, res) => {
             ? {}
             : { requester: new mongoose.Types.ObjectId(userId) };
         const conversations = await SupportConversation.find(query)
-            .populate("requester", "username email")
-            .populate("assignedTo", "username email")
+            .populate("requester", "username email isAdmin identityVerificationStatus tutorVerificationStatus verifiedBadgeLevel")
+            .populate("assignedTo", "username email isAdmin identityVerificationStatus tutorVerificationStatus verifiedBadgeLevel")
             .sort({ lastMessageAt: -1 });
         const participantIds = conversations.flatMap((conversation) => [
             conversation.requester?._id?.toString?.() || "",
@@ -244,9 +248,9 @@ export const createSupportConversation = async (req, res) => {
             attachmentMimeType: attachment?.mimeType || null,
         });
         const populatedConversation = await SupportConversation.findById(conversation._id)
-            .populate("requester", "username email")
-            .populate("assignedTo", "username email");
-        const populatedMessage = await SupportMessage.findById(message._id).populate("sender", "username email");
+            .populate("requester", "username email isAdmin identityVerificationStatus tutorVerificationStatus verifiedBadgeLevel")
+            .populate("assignedTo", "username email isAdmin identityVerificationStatus tutorVerificationStatus verifiedBadgeLevel");
+        const populatedMessage = await SupportMessage.findById(message._id).populate("sender", "username email isAdmin identityVerificationStatus tutorVerificationStatus verifiedBadgeLevel");
         const profileMap = await getProfileMap([
             userId,
             assignedTo || "",
@@ -296,7 +300,7 @@ export const getSupportMessages = async (req, res) => {
         const messages = await SupportMessage.find({
             conversation: conversation._id,
         })
-            .populate("sender", "username email")
+            .populate("sender", "username email isAdmin identityVerificationStatus tutorVerificationStatus verifiedBadgeLevel")
             .sort({ createdAt: 1 });
         const profileMap = await getProfileMap(messages.map((message) => message.sender?._id?.toString?.() || ""));
         return res.json(messages.map((message) => serializeMessage(message, userId, profileMap)));
@@ -352,10 +356,10 @@ export const sendSupportMessage = async (req, res) => {
             conversation.assignedTo = new mongoose.Types.ObjectId(userId);
         }
         await conversation.save();
-        const populatedMessage = await SupportMessage.findById(message._id).populate("sender", "username email");
+        const populatedMessage = await SupportMessage.findById(message._id).populate("sender", "username email isAdmin identityVerificationStatus tutorVerificationStatus verifiedBadgeLevel");
         const populatedConversation = await SupportConversation.findById(conversation._id)
-            .populate("requester", "username email")
-            .populate("assignedTo", "username email");
+            .populate("requester", "username email isAdmin identityVerificationStatus tutorVerificationStatus verifiedBadgeLevel")
+            .populate("assignedTo", "username email isAdmin identityVerificationStatus tutorVerificationStatus verifiedBadgeLevel");
         const requesterId = populatedConversation?.requester?._id?.toString?.() ||
             populatedConversation?.requester?.toString?.() ||
             "";

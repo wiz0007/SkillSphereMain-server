@@ -23,6 +23,9 @@ export interface IVerificationRequest extends Document {
   reviewNote?: string;
   reviewedBy?: mongoose.Types.ObjectId | null;
   reviewedAt?: Date | null;
+  revokedBy?: mongoose.Types.ObjectId | null;
+  revokedAt?: Date | null;
+  revocationNote?: string;
 }
 
 const VerificationRequestSchema = new Schema<IVerificationRequest>(
@@ -108,6 +111,21 @@ const VerificationRequestSchema = new Schema<IVerificationRequest>(
     reviewedAt: {
       type: Date,
       default: null,
+    },
+    revokedBy: {
+      type: Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+    },
+    revokedAt: {
+      type: Date,
+      default: null,
+    },
+    revocationNote: {
+      type: String,
+      default: "",
+      trim: true,
+      maxlength: 1000,
     },
   },
   { timestamps: true }

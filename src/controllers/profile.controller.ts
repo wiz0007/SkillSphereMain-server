@@ -413,12 +413,13 @@ export const getPublicProfile: RequestHandler = async (req, res) => {
 
     const user = await User.findById(objectId)
       .select(
-        "username profileCompleted identityVerificationStatus tutorVerificationStatus verifiedBadgeLevel"
+        "username profileCompleted isAdmin identityVerificationStatus tutorVerificationStatus verifiedBadgeLevel"
       )
       .lean();
 
     return res.json({
       username: user?.username,
+      isAdmin: Boolean(user?.isAdmin),
       identityVerificationStatus:
         user?.identityVerificationStatus || "not_started",
       tutorVerificationStatus:

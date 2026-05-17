@@ -83,6 +83,12 @@ const serializeUser = (value: any, profileMap: Map<string, any>) => {
     _id: id,
     username: value?.username || "",
     email: value?.email || "",
+    isAdmin: Boolean(value?.isAdmin),
+    identityVerificationStatus:
+      value?.identityVerificationStatus || "not_started",
+    tutorVerificationStatus:
+      value?.tutorVerificationStatus || "not_started",
+    verifiedBadgeLevel: value?.verifiedBadgeLevel || "none",
     fullName: profile?.fullName || "",
     profilePhoto: profile?.profilePhoto || "",
     isTutor: profile?.isTutor || false,
@@ -186,8 +192,14 @@ const getConversationOrThrow = async (
   const executive = await isSupportExecutive(userId);
 
   const conversation = await SupportConversation.findById(conversationId)
-    .populate("requester", "username email")
-    .populate("assignedTo", "username email");
+    .populate(
+      "requester",
+      "username email isAdmin identityVerificationStatus tutorVerificationStatus verifiedBadgeLevel"
+    )
+    .populate(
+      "assignedTo",
+      "username email isAdmin identityVerificationStatus tutorVerificationStatus verifiedBadgeLevel"
+    );
 
   if (!conversation) {
     return { executive, conversation: null };
@@ -227,8 +239,14 @@ export const getSupportBootstrap: RequestHandler = async (req, res) => {
       : { requester: new mongoose.Types.ObjectId(userId) };
 
     const conversations = await SupportConversation.find(query)
-      .populate("requester", "username email")
-      .populate("assignedTo", "username email")
+      .populate(
+        "requester",
+        "username email isAdmin identityVerificationStatus tutorVerificationStatus verifiedBadgeLevel"
+      )
+      .populate(
+        "assignedTo",
+        "username email isAdmin identityVerificationStatus tutorVerificationStatus verifiedBadgeLevel"
+      )
       .sort({ lastMessageAt: -1 });
 
     const participantIds = conversations.flatMap((conversation) => [
@@ -319,12 +337,18 @@ export const createSupportConversation: RequestHandler = async (req, res) => {
     const populatedConversation = await SupportConversation.findById(
       conversation._id
     )
-      .populate("requester", "username email")
-      .populate("assignedTo", "username email");
+      .populate(
+        "requester",
+        "username email isAdmin identityVerificationStatus tutorVerificationStatus verifiedBadgeLevel"
+      )
+      .populate(
+        "assignedTo",
+        "username email isAdmin identityVerificationStatus tutorVerificationStatus verifiedBadgeLevel"
+      );
 
     const populatedMessage = await SupportMessage.findById(message._id).populate(
       "sender",
-      "username email"
+      "username email isAdmin identityVerificationStatus tutorVerificationStatus verifiedBadgeLevel"
     );
 
     const profileMap = await getProfileMap([
@@ -395,7 +419,10 @@ export const getSupportMessages: RequestHandler = async (req, res) => {
     const messages = await SupportMessage.find({
       conversation: conversation._id,
     })
-      .populate("sender", "username email")
+      .populate(
+        "sender",
+        "username email isAdmin identityVerificationStatus tutorVerificationStatus verifiedBadgeLevel"
+      )
       .sort({ createdAt: 1 });
 
     const profileMap = await getProfileMap(
@@ -477,13 +504,19 @@ export const sendSupportMessage: RequestHandler = async (req, res) => {
 
     const populatedMessage = await SupportMessage.findById(message._id).populate(
       "sender",
-      "username email"
+      "username email isAdmin identityVerificationStatus tutorVerificationStatus verifiedBadgeLevel"
     );
     const populatedConversation = await SupportConversation.findById(
       conversation._id
     )
-      .populate("requester", "username email")
-      .populate("assignedTo", "username email");
+      .populate(
+        "requester",
+        "username email isAdmin identityVerificationStatus tutorVerificationStatus verifiedBadgeLevel"
+      )
+      .populate(
+        "assignedTo",
+        "username email isAdmin identityVerificationStatus tutorVerificationStatus verifiedBadgeLevel"
+      );
 
     const requesterId =
       populatedConversation?.requester?._id?.toString?.() ||

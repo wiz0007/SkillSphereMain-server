@@ -17,6 +17,9 @@ export interface IVerificationRequest extends Document {
     reviewNote?: string;
     reviewedBy?: mongoose.Types.ObjectId | null;
     reviewedAt?: Date | null;
+    revokedBy?: mongoose.Types.ObjectId | null;
+    revokedAt?: Date | null;
+    revocationNote?: string;
 }
 declare const _default: mongoose.Model<IVerificationRequest, {}, {}, {}, mongoose.Document<unknown, {}, IVerificationRequest, {}, mongoose.DefaultSchemaOptions> & IVerificationRequest & Required<{
     _id: mongoose.Types.ObjectId;

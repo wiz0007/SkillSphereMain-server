@@ -82,10 +82,15 @@ const uploadVerificationAsset = async (file?: Express.Multer.File) => {
 };
 
 const deriveVerifiedBadgeLevel = (user: {
+  isAdmin?: boolean;
   isVerified: boolean;
   identityVerificationStatus?: string;
   tutorVerificationStatus?: string;
 }) => {
+  if (user.isAdmin) {
+    return "none";
+  }
+
   if (user.tutorVerificationStatus === "approved") {
     return "tutor";
   }
@@ -129,9 +134,14 @@ const serializeVerification = (
   createdAt: request.createdAt,
   updatedAt: request.updatedAt,
   reviewedAt: request.reviewedAt || null,
+  revokedAt: request.revokedAt || null,
+  revocationNote: request.revocationNote || "",
   user: request.user ? serializeUser(request.user, profileMap) : null,
   reviewedBy: request.reviewedBy
     ? serializeUser(request.reviewedBy, profileMap)
+    : null,
+  revokedBy: request.revokedBy
+    ? serializeUser(request.revokedBy, profileMap)
     : null,
   assets: {
     documentFrontUrl: request.documentFrontUrl || null,
@@ -157,6 +167,12 @@ export const getVerificationSummary: RequestHandler = async (req, res) => {
 
     if (!user) {
       return res.status(404).json({ message: "User not found" });
+    }
+
+    if (user.isAdmin) {
+      return res.status(400).json({
+        message: "Admin accounts do not require identity verification",
+      });
     }
 
     const requests = await VerificationRequest.find({
@@ -308,6 +324,12 @@ export const submitTutorVerification: RequestHandler = async (req, res) => {
       return res.status(404).json({ message: "User profile not found" });
     }
 
+    if (user.isAdmin) {
+      return res.status(400).json({
+        message: "Admin accounts do not require tutor verification",
+      });
+    }
+
     if (!profile.isTutor) {
       return res.status(400).json({ message: "Only tutors can request tutor verification" });
     }
@@ -402,6 +424,7 @@ export const getAdminVerificationRequests: RequestHandler = async (req, res) => 
     const requests = await VerificationRequest.find(query)
       .populate("user", "username email isAdmin")
       .populate("reviewedBy", "username email isAdmin")
+      .populate("revokedBy", "username email isAdmin")
       .sort({ createdAt: -1 })
       .limit(150)
       .lean();
@@ -410,6 +433,7 @@ export const getAdminVerificationRequests: RequestHandler = async (req, res) => 
       requests.flatMap((request) => [
         request.user?._id?.toString?.() || "",
         request.reviewedBy?._id?.toString?.() || "",
+        request.revokedBy?._id?.toString?.() || "",
       ])
     );
 
@@ -498,5 +522,96 @@ export const reviewVerificationRequest: RequestHandler = async (req, res) => {
   } catch (error: any) {
     console.error("ADMIN REVIEW VERIFICATION ERROR:", error);
     return res.status(500).json({ message: "Failed to review verification request" });
+  }
+};
+
+export const deverifyVerificationRequest: RequestHandler = async (req, res) => {
+  try {
+    const requestId = getId(req.params.id);
+    const reviewerId = req.userId;
+    const reviewNote = String(req.body.reviewNote || "").trim();
+
+    if (!reviewerId) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+
+    if (!mongoose.Types.ObjectId.isValid(requestId)) {
+      return res.status(400).json({ message: "Invalid verification request ID" });
+    }
+
+    const request = await VerificationRequest.findById(requestId);
+
+    if (!request) {
+      return res.status(404).json({ message: "Verification request not found" });
+    }
+
+    if (request.status !== "approved") {
+      return res.status(400).json({ message: "Only approved verification requests can be revoked" });
+    }
+
+    if (request.revokedAt) {
+      return res.status(400).json({ message: "This verification has already been revoked" });
+    }
+
+    const [user, profile] = await Promise.all([
+      User.findById(request.user),
+      Profile.findOne({ user: request.user }),
+    ]);
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    if (request.type === "identity") {
+      user.identityVerificationStatus = "not_started";
+      user.tutorVerificationStatus = "not_started";
+
+      if (profile?.tutorProfile) {
+        profile.tutorProfile.isVerified = false;
+      }
+    } else {
+      user.tutorVerificationStatus = "not_started";
+
+      if (profile?.tutorProfile) {
+        profile.tutorProfile.isVerified = false;
+      }
+    }
+
+    request.revokedBy = new mongoose.Types.ObjectId(reviewerId);
+    request.revokedAt = new Date();
+    request.revocationNote = reviewNote;
+
+    await Promise.all([
+      request.save(),
+      user.save(),
+      profile ? profile.save() : Promise.resolve(),
+    ]);
+
+    const synced = await syncVerificationSummary(user._id);
+    const populated = await VerificationRequest.findById(request._id)
+      .populate("user", "username email isAdmin")
+      .populate("reviewedBy", "username email isAdmin")
+      .populate("revokedBy", "username email isAdmin")
+      .lean();
+    const profileMap = await getProfileMap([
+      request.user.toString(),
+      reviewerId,
+    ]);
+
+    return res.json({
+      message: "Verification revoked",
+      request: serializeVerification(populated, profileMap),
+      summary: {
+        emailVerified: Boolean(synced?.isVerified),
+        identityVerificationStatus:
+          synced?.identityVerificationStatus || "not_started",
+        tutorVerificationStatus:
+          synced?.tutorVerificationStatus || "not_started",
+        verifiedBadgeLevel: synced?.verifiedBadgeLevel || "none",
+      },
+    });
+  } catch (error: any) {
+    console.error("ADMIN DEVERIFY VERIFICATION ERROR:", error);
+    return res.status(500).json({ message: "Failed to revoke verification" });
   }
 };

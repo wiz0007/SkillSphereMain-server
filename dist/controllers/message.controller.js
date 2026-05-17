@@ -37,6 +37,10 @@ const serializeUser = (value, profileMap) => {
     return {
         _id: id,
         username: value?.username || "",
+        isAdmin: Boolean(value?.isAdmin),
+        identityVerificationStatus: value?.identityVerificationStatus || "not_started",
+        tutorVerificationStatus: value?.tutorVerificationStatus || "not_started",
+        verifiedBadgeLevel: value?.verifiedBadgeLevel || "none",
         fullName: profile?.fullName || "",
         profilePhoto: profile?.profilePhoto || "",
         isTutor: profile?.isTutor || false,
@@ -96,8 +100,8 @@ export const getConversations = async (req, res) => {
                 },
             ],
         })
-            .populate("sender", "username")
-            .populate("recipient", "username")
+            .populate("sender", "username isAdmin identityVerificationStatus tutorVerificationStatus verifiedBadgeLevel")
+            .populate("recipient", "username isAdmin identityVerificationStatus tutorVerificationStatus verifiedBadgeLevel")
             .sort({ createdAt: -1 });
         const profileMap = await buildProfileMap(messages.flatMap((message) => [
             message.sender?._id?.toString?.() || "",
@@ -185,8 +189,8 @@ export const getMessagesWithUser = async (req, res) => {
                 },
             ],
         })
-            .populate("sender", "username")
-            .populate("recipient", "username")
+            .populate("sender", "username isAdmin identityVerificationStatus tutorVerificationStatus verifiedBadgeLevel")
+            .populate("recipient", "username isAdmin identityVerificationStatus tutorVerificationStatus verifiedBadgeLevel")
             .sort({ createdAt: 1 });
         const profileMap = await buildProfileMap([userId, otherUserId]);
         return res.json(messages.map((message) => serializeMessage(message, userId, profileMap)));
@@ -229,8 +233,8 @@ export const sendMessage = async (req, res) => {
             text,
         });
         const populatedMessage = await Message.findById(message._id)
-            .populate("sender", "username")
-            .populate("recipient", "username");
+            .populate("sender", "username isAdmin identityVerificationStatus tutorVerificationStatus verifiedBadgeLevel")
+            .populate("recipient", "username isAdmin identityVerificationStatus tutorVerificationStatus verifiedBadgeLevel");
         const profileMap = await buildProfileMap([userId, recipientId]);
         const senderPayload = serializeMessage(populatedMessage, userId, profileMap);
         const recipientPayload = serializeMessage(populatedMessage, recipientId, profileMap);
@@ -269,8 +273,8 @@ export const getChatContacts = async (req, res) => {
                 },
             ],
         })
-            .populate("student", "username")
-            .populate("tutor", "username")
+            .populate("student", "username isAdmin identityVerificationStatus tutorVerificationStatus verifiedBadgeLevel")
+            .populate("tutor", "username isAdmin identityVerificationStatus tutorVerificationStatus verifiedBadgeLevel")
             .sort({ updatedAt: -1 });
         const profileMap = await buildProfileMap(allowedPartnerIds);
         const usersById = new Map();
