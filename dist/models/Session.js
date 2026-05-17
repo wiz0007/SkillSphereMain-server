@@ -23,6 +23,8 @@ const SessionSchema = new Schema({
     date: { type: Date, required: true },
     duration: { type: Number, required: true },
     acceptedAt: Date,
+    studentReminderSentAt: Date,
+    tutorReminderSentAt: Date,
     tutorMarkedCompletedAt: Date,
     studentConfirmedCompletionAt: Date,
     status: {

@@ -22,6 +22,9 @@ export interface IUser extends Document {
 
   otp?: string | null;
   otpExpires?: Date | null;
+  passwordResetToken?: string | null;
+  passwordResetExpires?: Date | null;
+  lastVerificationReminderAt?: Date | null;
 
   otpAttempts: number;
   lockUntil?: Date | null;
@@ -96,6 +99,18 @@ const UserSchema = new Schema<IUser>(
     /* OTP */
     otp: String,
     otpExpires: Date,
+    passwordResetToken: {
+      type: String,
+      default: null,
+    },
+    passwordResetExpires: {
+      type: Date,
+      default: null,
+    },
+    lastVerificationReminderAt: {
+      type: Date,
+      default: null,
+    },
 
     /* 🔐 SECURITY */
     otpAttempts: {

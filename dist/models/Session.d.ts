@@ -9,6 +9,8 @@ export interface ISession extends Document {
     date: Date;
     duration: number;
     acceptedAt?: Date;
+    studentReminderSentAt?: Date;
+    tutorReminderSentAt?: Date;
     tutorMarkedCompletedAt?: Date;
     studentConfirmedCompletionAt?: Date;
     hiddenFor: mongoose.Types.ObjectId[];

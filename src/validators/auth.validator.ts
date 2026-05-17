@@ -15,6 +15,20 @@ export const deleteAccountSchema = z.object({
   confirmationText: z.literal("DELETE MY ACCOUNT"),
 });
 
+export const forgotPasswordSchema = z.object({
+  email: z.string().email(),
+});
+
+export const resetPasswordSchema = z.object({
+  token: z.string().min(1),
+  newPassword: z
+    .string()
+    .regex(
+      /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&]).{8,}$/,
+      "Weak password"
+    ),
+});
+
 export const rechargeSkillCoinSchema = z.object({
   amount: z.number().min(1).max(100000),
   gatewayReference: z.string().optional(),

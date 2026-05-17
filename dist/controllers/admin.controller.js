@@ -56,6 +56,9 @@ const serializeUser = (user, profileMap) => {
         profilePhoto: profile?.profilePhoto || "",
         isTutor: profile?.isTutor || false,
         isAdmin: Boolean(user?.isAdmin),
+        identityVerificationStatus: user?.identityVerificationStatus || "not_started",
+        tutorVerificationStatus: user?.tutorVerificationStatus || "not_started",
+        verifiedBadgeLevel: user?.verifiedBadgeLevel || "none",
         profileCompleted: Boolean(user?.profileCompleted),
         isVerified: Boolean(user?.isVerified),
         skillCoinBalance: Number(user?.skillCoinBalance || 0),
@@ -194,7 +197,7 @@ export const getAdminOverview = async (_req, res) => {
             Course.countDocuments({ type: "live" }),
             Course.countDocuments({ type: "tuition" }),
             User.find()
-                .select("username email isAdmin profileCompleted isVerified skillCoinBalance lockedSkillCoins createdAt")
+                .select("username email isAdmin identityVerificationStatus tutorVerificationStatus verifiedBadgeLevel profileCompleted isVerified skillCoinBalance lockedSkillCoins createdAt")
                 .sort({ createdAt: -1 })
                 .limit(6)
                 .lean(),
@@ -240,7 +243,7 @@ export const getAdminUsers = async (req, res) => {
             }
             : {};
         const users = await User.find(query)
-            .select("username email isAdmin profileCompleted isVerified skillCoinBalance lockedSkillCoins createdAt")
+            .select("username email isAdmin identityVerificationStatus tutorVerificationStatus verifiedBadgeLevel profileCompleted isVerified skillCoinBalance lockedSkillCoins createdAt")
             .sort({ createdAt: -1 })
             .limit(100)
             .lean();
@@ -357,7 +360,7 @@ export const deleteAdminUser = async (req, res) => {
 export const getAdminCourses = async (_req, res) => {
     try {
         const courses = await Course.find()
-            .populate("tutor", "username email isAdmin")
+            .populate("tutor", "username email isAdmin identityVerificationStatus tutorVerificationStatus verifiedBadgeLevel")
             .sort({ createdAt: -1 })
             .limit(100)
             .lean();
@@ -429,8 +432,8 @@ export const deleteAdminCourse = async (req, res) => {
 export const getAdminSessions = async (_req, res) => {
     try {
         const sessions = await Session.find()
-            .populate("student", "username email isAdmin")
-            .populate("tutor", "username email isAdmin")
+            .populate("student", "username email isAdmin identityVerificationStatus tutorVerificationStatus verifiedBadgeLevel")
+            .populate("tutor", "username email isAdmin identityVerificationStatus tutorVerificationStatus verifiedBadgeLevel")
             .populate("course", "title type")
             .sort({ date: -1 })
             .limit(100)
@@ -468,8 +471,8 @@ export const getAdminSessions = async (_req, res) => {
 export const getAdminSupportConversations = async (_req, res) => {
     try {
         const conversations = await SupportConversation.find()
-            .populate("requester", "username email isAdmin")
-            .populate("assignedTo", "username email isAdmin")
+            .populate("requester", "username email isAdmin identityVerificationStatus tutorVerificationStatus verifiedBadgeLevel")
+            .populate("assignedTo", "username email isAdmin identityVerificationStatus tutorVerificationStatus verifiedBadgeLevel")
             .sort({ lastMessageAt: -1 })
             .limit(100)
             .lean();
@@ -503,14 +506,14 @@ export const getAdminSupportMessages = async (req, res) => {
             return res.status(400).json({ message: "Invalid support thread ID" });
         }
         const conversation = await SupportConversation.findById(id)
-            .populate("requester", "username email isAdmin")
-            .populate("assignedTo", "username email isAdmin")
+            .populate("requester", "username email isAdmin identityVerificationStatus tutorVerificationStatus verifiedBadgeLevel")
+            .populate("assignedTo", "username email isAdmin identityVerificationStatus tutorVerificationStatus verifiedBadgeLevel")
             .lean();
         if (!conversation) {
             return res.status(404).json({ message: "Support conversation not found" });
         }
         const messages = await SupportMessage.find({ conversation: conversation._id })
-            .populate("sender", "username email isAdmin")
+            .populate("sender", "username email isAdmin identityVerificationStatus tutorVerificationStatus verifiedBadgeLevel")
             .sort({ createdAt: 1 })
             .lean();
         const userIds = [
@@ -582,8 +585,8 @@ export const sendAdminSupportMessage = async (req, res) => {
             });
         }
         const conversation = await SupportConversation.findById(id)
-            .populate("requester", "username email isAdmin")
-            .populate("assignedTo", "username email isAdmin");
+            .populate("requester", "username email isAdmin identityVerificationStatus tutorVerificationStatus verifiedBadgeLevel")
+            .populate("assignedTo", "username email isAdmin identityVerificationStatus tutorVerificationStatus verifiedBadgeLevel");
         if (!conversation) {
             return res.status(404).json({ message: "Support conversation not found" });
         }
@@ -603,11 +606,11 @@ export const sendAdminSupportMessage = async (req, res) => {
         conversation.lastMessageAt = new Date();
         await conversation.save();
         const populatedMessage = await SupportMessage.findById(message._id)
-            .populate("sender", "username email isAdmin")
+            .populate("sender", "username email isAdmin identityVerificationStatus tutorVerificationStatus verifiedBadgeLevel")
             .lean();
         const populatedConversation = await SupportConversation.findById(conversation._id)
-            .populate("requester", "username email isAdmin")
-            .populate("assignedTo", "username email isAdmin")
+            .populate("requester", "username email isAdmin identityVerificationStatus tutorVerificationStatus verifiedBadgeLevel")
+            .populate("assignedTo", "username email isAdmin identityVerificationStatus tutorVerificationStatus verifiedBadgeLevel")
             .lean();
         const requesterId = populatedConversation?.requester?._id?.toString?.() ||
             populatedConversation?.requester?.toString?.() ||
@@ -658,7 +661,7 @@ export const getAdminReviews = async (_req, res) => {
     try {
         const reviews = await CourseReview.find()
             .populate("course", "title type")
-            .populate("user", "username email isAdmin")
+            .populate("user", "username email isAdmin identityVerificationStatus tutorVerificationStatus verifiedBadgeLevel")
             .sort({ createdAt: -1 })
             .limit(100)
             .lean();
@@ -706,7 +709,7 @@ export const deleteAdminReview = async (req, res) => {
 export const getAdminWalletTransactions = async (_req, res) => {
     try {
         const transactions = await WalletTransaction.find()
-            .populate("user", "username email isAdmin")
+            .populate("user", "username email isAdmin identityVerificationStatus tutorVerificationStatus verifiedBadgeLevel")
             .sort({ createdAt: -1 })
             .limit(120)
             .lean();

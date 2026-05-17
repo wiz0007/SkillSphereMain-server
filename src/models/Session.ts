@@ -12,6 +12,8 @@ export interface ISession extends Document {
   date: Date;
   duration: number; // in minutes
   acceptedAt?: Date;
+  studentReminderSentAt?: Date;
+  tutorReminderSentAt?: Date;
   tutorMarkedCompletedAt?: Date;
   studentConfirmedCompletionAt?: Date;
   hiddenFor: mongoose.Types.ObjectId[];
@@ -52,6 +54,8 @@ const SessionSchema = new Schema<ISession>(
     date: { type: Date, required: true },
     duration: { type: Number, required: true },
     acceptedAt: Date,
+    studentReminderSentAt: Date,
+    tutorReminderSentAt: Date,
     tutorMarkedCompletedAt: Date,
     studentConfirmedCompletionAt: Date,
 

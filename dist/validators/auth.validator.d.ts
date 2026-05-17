@@ -7,6 +7,13 @@ export declare const deleteAccountSchema: z.ZodObject<{
     currentPassword: z.ZodString;
     confirmationText: z.ZodLiteral<"DELETE MY ACCOUNT">;
 }, z.core.$strip>;
+export declare const forgotPasswordSchema: z.ZodObject<{
+    email: z.ZodString;
+}, z.core.$strip>;
+export declare const resetPasswordSchema: z.ZodObject<{
+    token: z.ZodString;
+    newPassword: z.ZodString;
+}, z.core.$strip>;
 export declare const rechargeSkillCoinSchema: z.ZodObject<{
     amount: z.ZodNumber;
     gatewayReference: z.ZodOptional<z.ZodString>;

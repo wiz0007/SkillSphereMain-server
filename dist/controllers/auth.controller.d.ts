@@ -3,6 +3,8 @@ export declare const register: RequestHandler;
 export declare const login: RequestHandler;
 export declare const verifyOTP: RequestHandler;
 export declare const resendOTP: RequestHandler;
+export declare const forgotPassword: RequestHandler;
+export declare const resetPassword: RequestHandler;
 export declare const checkUsername: RequestHandler;
 export declare const changePassword: RequestHandler;
 export declare const getCurrentUser: RequestHandler;

@@ -25,4 +25,16 @@ export const registerLimiter = rateLimit({
     max: 5,
     message: "Too many registrations. Try later.",
 });
+export const forgotPasswordLimiter = rateLimit({
+    windowMs: 30 * 60 * 1000,
+    max: 5,
+    message: "Too many password reset requests. Try again later.",
+    keyGenerator: (req) => req.ip + (req.body.email || ""),
+});
+export const resetPasswordLimiter = rateLimit({
+    windowMs: 30 * 60 * 1000,
+    max: 10,
+    message: "Too many password reset attempts. Try again later.",
+    keyGenerator: (req) => req.ip + (req.body.token || ""),
+});
 //# sourceMappingURL=rateLimiter.js.map

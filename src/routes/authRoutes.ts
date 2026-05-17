@@ -5,6 +5,8 @@ import {
   verifyOTP,
   checkUsername,
   resendOTP,
+  forgotPassword,
+  resetPassword,
   changePassword,
   deleteAccount,
   getCurrentUser,
@@ -21,7 +23,9 @@ import { validate } from "../middlewares/validate.js";
 import {
   changePasswordSchema,
   deleteAccountSchema,
+  forgotPasswordSchema,
   rechargeSkillCoinSchema,
+  resetPasswordSchema,
   verifyWalletRechargeSchema,
 } from "../validators/auth.validator.js";
 
@@ -31,6 +35,8 @@ router.post("/register", registerLimiter, register);
 router.post("/login", loginLimiter, login);
 router.post("/verify-otp", otpLimiter, verifyOTP);
 router.post("/resend-otp", otpLimiter, resendOTP);
+router.post("/forgot-password", loginLimiter, validate(forgotPasswordSchema), forgotPassword);
+router.post("/reset-password", loginLimiter, validate(resetPasswordSchema), resetPassword);
 router.get("/check-username/:username", checkUsername);
 router.get("/me", protect, getCurrentUser);
 router.get("/admin-gifts/pending", protect, getPendingAdminGift);

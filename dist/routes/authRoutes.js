@@ -1,14 +1,16 @@
 import express from "express";
-import { register, login, verifyOTP, checkUsername, resendOTP, changePassword, deleteAccount, getCurrentUser, getPendingAdminGift, getWalletTransactions, getWalletProof, createWalletRechargeOrder, verifyWalletRecharge, claimAdminGift, } from "../controllers/auth.controller.js";
+import { register, login, verifyOTP, checkUsername, resendOTP, forgotPassword, resetPassword, changePassword, deleteAccount, getCurrentUser, getPendingAdminGift, getWalletTransactions, getWalletProof, createWalletRechargeOrder, verifyWalletRecharge, claimAdminGift, } from "../controllers/auth.controller.js";
 import { loginLimiter, otpLimiter, registerLimiter } from "../middlewares/rateLimiter.js";
 import { protect } from "../middlewares/protect.js";
 import { validate } from "../middlewares/validate.js";
-import { changePasswordSchema, deleteAccountSchema, rechargeSkillCoinSchema, verifyWalletRechargeSchema, } from "../validators/auth.validator.js";
+import { changePasswordSchema, deleteAccountSchema, forgotPasswordSchema, rechargeSkillCoinSchema, resetPasswordSchema, verifyWalletRechargeSchema, } from "../validators/auth.validator.js";
 const router = express.Router();
 router.post("/register", registerLimiter, register);
 router.post("/login", loginLimiter, login);
 router.post("/verify-otp", otpLimiter, verifyOTP);
 router.post("/resend-otp", otpLimiter, resendOTP);
+router.post("/forgot-password", loginLimiter, validate(forgotPasswordSchema), forgotPassword);
+router.post("/reset-password", loginLimiter, validate(resetPasswordSchema), resetPassword);
 router.get("/check-username/:username", checkUsername);
 router.get("/me", protect, getCurrentUser);
 router.get("/admin-gifts/pending", protect, getPendingAdminGift);

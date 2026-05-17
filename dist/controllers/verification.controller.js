@@ -128,11 +128,6 @@ export const getVerificationSummary = async (req, res) => {
         if (!user) {
             return res.status(404).json({ message: "User not found" });
         }
-        if (user.isAdmin) {
-            return res.status(400).json({
-                message: "Admin accounts do not require identity verification",
-            });
-        }
         const requests = await VerificationRequest.find({
             user: new mongoose.Types.ObjectId(userId),
         })
@@ -145,6 +140,7 @@ export const getVerificationSummary = async (req, res) => {
                 identityVerificationStatus: user.identityVerificationStatus,
                 tutorVerificationStatus: user.tutorVerificationStatus,
                 verifiedBadgeLevel: user.verifiedBadgeLevel,
+                isAdmin: Boolean(user.isAdmin),
             },
             requests: requests.map((request) => serializeVerification({
                 ...request,

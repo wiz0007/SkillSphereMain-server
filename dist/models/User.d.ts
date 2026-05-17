@@ -10,6 +10,9 @@ export interface IUser extends Document {
     verifiedBadgeLevel: "none" | "basic" | "identity" | "tutor";
     otp?: string | null;
     otpExpires?: Date | null;
+    passwordResetToken?: string | null;
+    passwordResetExpires?: Date | null;
+    lastVerificationReminderAt?: Date | null;
     otpAttempts: number;
     lockUntil?: Date | null;
     skillCoinBalance: number;

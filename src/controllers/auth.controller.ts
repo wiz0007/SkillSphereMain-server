@@ -14,7 +14,7 @@ import WalletRechargeOrder from "../models/WalletRechargeOrder.js";
 import { emitWalletUpdate } from "../config/socket.js";
 import { syncAdminAccess } from "../middlewares/adminOnly.js";
 import { generateOTP } from "../utils/generateOtp.js";
-import { sendOTPEmail } from "../utils/sendEmail.js";
+import { sendOTPEmail, sendPasswordResetEmail } from "../utils/sendEmail.js";
 import { getWalletTransactionProof } from "../services/auditAnchor.service.js";
 import {
   buildWalletSummary,
@@ -32,6 +32,24 @@ const getRazorpayConfig = () => ({
   keyId: process.env.RAZORPAY_KEY_ID || "",
   keySecret: process.env.RAZORPAY_KEY_SECRET || "",
 });
+
+const getFrontendBaseUrl = (req: Parameters<RequestHandler>[0]) => {
+  const configuredBase =
+    process.env.FRONTEND_URL ||
+    process.env.CLIENT_URL ||
+    process.env.APP_URL;
+
+  if (configuredBase) {
+    return configuredBase.replace(/\/$/, "");
+  }
+
+  const originHeader = req.headers.origin;
+  if (typeof originHeader === "string" && originHeader.trim()) {
+    return originHeader.replace(/\/$/, "");
+  }
+
+  return "https://skillsphere.space";
+};
 
 const RECHARGE_BONUS_OFFERS = [
   {
@@ -122,6 +140,8 @@ const toSafeUser = (
     password,
     otp,
     otpExpires,
+    passwordResetToken,
+    passwordResetExpires,
     otpAttempts,
     lockUntil,
     __v,
@@ -322,6 +342,93 @@ export const resendOTP: RequestHandler = async (req, res) => {
     return res.json({ message: "OTP resent" });
   } catch {
     return res.status(500).json({ message: "Failed to resend OTP" });
+  }
+};
+
+export const forgotPassword: RequestHandler = async (req, res) => {
+  try {
+    const email = String(req.body.email || "").trim().toLowerCase();
+
+    if (!email) {
+      return res.status(400).json({ message: "Email is required" });
+    }
+
+    const user = await User.findOne({ email });
+
+    if (user) {
+      const rawToken = crypto.randomBytes(32).toString("hex");
+      const hashedToken = crypto
+        .createHash("sha256")
+        .update(rawToken)
+        .digest("hex");
+
+      user.passwordResetToken = hashedToken;
+      user.passwordResetExpires = new Date(Date.now() + 30 * 60 * 1000);
+      await user.save();
+
+      const resetLink = `${getFrontendBaseUrl(req)}/reset-password/${rawToken}`;
+      await sendPasswordResetEmail(user.email, resetLink);
+    }
+
+    return res.json({
+      message:
+        "If an account exists for that email, a password reset link has been sent.",
+    });
+  } catch (error: any) {
+    console.error("FORGOT PASSWORD ERROR:", error);
+    return res.status(500).json({
+      message: "Failed to start password reset",
+    });
+  }
+};
+
+export const resetPassword: RequestHandler = async (req, res) => {
+  try {
+    const token = String(req.body.token || "");
+    const newPassword = String(req.body.newPassword || "");
+
+    if (!token || !newPassword) {
+      return res.status(400).json({ message: "Token and new password are required" });
+    }
+
+    const hashedToken = crypto
+      .createHash("sha256")
+      .update(token)
+      .digest("hex");
+
+    const user = await User.findOne({
+      passwordResetToken: hashedToken,
+      passwordResetExpires: { $gt: new Date() },
+    });
+
+    if (!user) {
+      return res.status(400).json({
+        message: "This reset link is invalid or has expired",
+      });
+    }
+
+    const isSamePassword = await bcrypt.compare(newPassword, user.password);
+    if (isSamePassword) {
+      return res.status(400).json({
+        message: "New password must be different from the current password",
+      });
+    }
+
+    user.password = await bcrypt.hash(newPassword, 10);
+    user.passwordResetToken = null;
+    user.passwordResetExpires = null;
+    user.lockUntil = null;
+    user.otpAttempts = 0;
+    await user.save();
+
+    return res.json({
+      message: "Password reset successful. You can now sign in.",
+    });
+  } catch (error: any) {
+    console.error("RESET PASSWORD ERROR:", error);
+    return res.status(500).json({
+      message: "Failed to reset password",
+    });
   }
 };
 
