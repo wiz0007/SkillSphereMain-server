@@ -107,6 +107,9 @@ const serializeUser = (value, profileMap) => {
         fullName: profile?.fullName || "",
         profilePhoto: profile?.profilePhoto || "",
         isTutor: profile?.isTutor || false,
+        isAdmin: !!value?.isAdmin,
+        verifiedBadgeLevel: value?.verifiedBadgeLevel || "none",
+        tutorVerificationStatus: value?.tutorVerificationStatus || "not_started",
     };
 };
 const hasUserEnrolledInCourse = async (userId, course) => {
@@ -372,7 +375,7 @@ export const createCourse = async (req, res) => {
 export const getAllCourses = async (_req, res) => {
     try {
         const courses = await Course.find()
-            .populate("tutor", "username")
+            .populate("tutor", "username isAdmin verifiedBadgeLevel tutorVerificationStatus")
             .sort({ createdAt: -1 })
             .lean();
         const finalCourses = await attachProfileToCourses(courses.map((course) => sanitizeCourseDocument(course)));
@@ -392,7 +395,7 @@ export const getMyCourses = async (req, res) => {
             return res.status(401).json({ message: "Unauthorized" });
         }
         const courses = await Course.find({ tutor: userId })
-            .populate("tutor", "username")
+            .populate("tutor", "username isAdmin verifiedBadgeLevel tutorVerificationStatus")
             .sort({ createdAt: -1 })
             .lean();
         const finalCourses = await attachProfileToCourses(courses.map((course) => sanitizeCourseDocument(course, { includeDriveLink: true })));
@@ -484,7 +487,9 @@ export const getCourseById = async (req, res) => {
         if (!isValidObjectId(id)) {
             return res.status(400).json({ message: "Invalid ID" });
         }
-        const course = await Course.findById(id).populate("tutor", "username").lean();
+        const course = await Course.findById(id)
+            .populate("tutor", "username isAdmin verifiedBadgeLevel tutorVerificationStatus")
+            .lean();
         if (!course) {
             return res.status(404).json({ message: "Course not found" });
         }
@@ -1558,7 +1563,7 @@ export const getSavedCourses = async (req, res) => {
         const courses = await Course.find({
             savedBy: userId,
         })
-            .populate("tutor", "username")
+            .populate("tutor", "username isAdmin verifiedBadgeLevel tutorVerificationStatus")
             .sort({ createdAt: -1 })
             .lean();
         const finalCourses = await attachProfileToCourses(courses.map((course) => sanitizeCourseDocument(course)));

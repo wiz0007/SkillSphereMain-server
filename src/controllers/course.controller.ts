@@ -142,6 +142,10 @@ const serializeUser = (value: any, profileMap: Map<string, any>) => {
     fullName: profile?.fullName || "",
     profilePhoto: profile?.profilePhoto || "",
     isTutor: profile?.isTutor || false,
+    isAdmin: !!value?.isAdmin,
+    verifiedBadgeLevel: value?.verifiedBadgeLevel || "none",
+    tutorVerificationStatus:
+      value?.tutorVerificationStatus || "not_started",
   };
 };
 
@@ -497,7 +501,10 @@ export const createCourse: RequestHandler = async (req, res) => {
 export const getAllCourses: RequestHandler = async (_req, res) => {
   try {
     const courses = await Course.find()
-      .populate("tutor", "username")
+      .populate(
+        "tutor",
+        "username isAdmin verifiedBadgeLevel tutorVerificationStatus"
+      )
       .sort({ createdAt: -1 })
       .lean();
 
@@ -523,7 +530,10 @@ export const getMyCourses: RequestHandler = async (req, res) => {
     }
 
     const courses = await Course.find({ tutor: userId })
-      .populate("tutor", "username")
+      .populate(
+        "tutor",
+        "username isAdmin verifiedBadgeLevel tutorVerificationStatus"
+      )
       .sort({ createdAt: -1 })
       .lean();
 
@@ -643,7 +653,12 @@ export const getCourseById: RequestHandler = async (req, res) => {
       return res.status(400).json({ message: "Invalid ID" });
     }
 
-    const course = await Course.findById(id).populate("tutor", "username").lean();
+    const course = await Course.findById(id)
+      .populate(
+        "tutor",
+        "username isAdmin verifiedBadgeLevel tutorVerificationStatus"
+      )
+      .lean();
 
     if (!course) {
       return res.status(404).json({ message: "Course not found" });
@@ -2020,7 +2035,10 @@ export const getSavedCourses: RequestHandler = async (req, res) => {
     const courses = await Course.find({
       savedBy: userId,
     })
-      .populate("tutor", "username")
+      .populate(
+        "tutor",
+        "username isAdmin verifiedBadgeLevel tutorVerificationStatus"
+      )
       .sort({ createdAt: -1 })
       .lean();
 
