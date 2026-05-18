@@ -12,6 +12,9 @@ type WalletTransactionInput = {
     | "recharge"
     | "admin_credit"
     | "admin_debit"
+    | "withdrawal_lock"
+    | "withdrawal_release"
+    | "withdrawal_spend"
     | "session_lock"
     | "session_unlock"
     | "session_spend"
@@ -186,6 +189,7 @@ export const lockSkillCoins = async (
   },
   dbSession?: mongoose.ClientSession,
   transactionType:
+    | "withdrawal_lock"
     | "session_lock"
     | "tuition_lock"
     | "recorded_course_lock" = "session_lock"
@@ -224,6 +228,7 @@ export const unlockSkillCoins = async (
   },
   dbSession?: mongoose.ClientSession,
   transactionType:
+    | "withdrawal_release"
     | "session_unlock"
     | "tuition_unlock"
     | "recorded_course_unlock" = "session_unlock"
@@ -247,10 +252,55 @@ export const unlockSkillCoins = async (
   return buildWalletSummary(user);
 };
 
+export const spendLockedSkillCoins = async (
+  user: IUser,
+  amount: number,
+  description: string,
+  metadata?: {
+    sessionId?: mongoose.Types.ObjectId | string;
+    courseId?: mongoose.Types.ObjectId | string;
+    extra?: Record<string, unknown>;
+  },
+  dbSession?: mongoose.ClientSession,
+  transactionType:
+    | "withdrawal_spend"
+    | "session_spend"
+    | "tuition_spend"
+    | "recorded_course_spend" = "withdrawal_spend"
+) => {
+  if (amount <= 0) {
+    throw new Error("Amount must be greater than 0");
+  }
+
+  if (user.lockedSkillCoins < amount || user.skillCoinBalance < amount) {
+    throw new Error("Locked SkillCoin balance is insufficient");
+  }
+
+  user.lockedSkillCoins = Math.max(0, user.lockedSkillCoins - amount);
+  user.skillCoinBalance = Math.max(0, user.skillCoinBalance - amount);
+  await user.save(dbSession ? { session: dbSession } : undefined);
+
+  await recordWalletTransaction({
+    userId: user._id,
+    type: transactionType,
+    amount: -amount,
+    balanceAfter: user.skillCoinBalance,
+    lockedAfter: user.lockedSkillCoins,
+    description,
+    ...(metadata?.sessionId ? { sessionId: metadata.sessionId } : {}),
+    ...(metadata?.courseId ? { courseId: metadata.courseId } : {}),
+    ...(metadata?.extra ? { metadata: metadata.extra } : {}),
+    ...(dbSession ? { dbSession } : {}),
+  });
+
+  return buildWalletSummary(user);
+};
+
 export const settleLockedSkillCoins = async ({
   student,
   tutor,
   amount,
+  tutorAmount,
   sessionId,
   courseId,
   description,
@@ -261,6 +311,7 @@ export const settleLockedSkillCoins = async ({
   student: IUser;
   tutor: IUser;
   amount: number;
+  tutorAmount?: number;
   sessionId?: mongoose.Types.ObjectId | string;
   courseId?: mongoose.Types.ObjectId | string;
   description: string;
@@ -278,9 +329,18 @@ export const settleLockedSkillCoins = async ({
     throw new Error("Student wallet balance is inconsistent for settlement");
   }
 
+  const creditedTutorAmount =
+    typeof tutorAmount === "number" ? tutorAmount : amount;
+
+  if (creditedTutorAmount < 0 || creditedTutorAmount > amount) {
+    throw new Error("Tutor payout amount is invalid for settlement");
+  }
+
+  const commissionAmount = amount - creditedTutorAmount;
+
   student.lockedSkillCoins = Math.max(0, student.lockedSkillCoins - amount);
   student.skillCoinBalance = Math.max(0, student.skillCoinBalance - amount);
-  tutor.skillCoinBalance += amount;
+  tutor.skillCoinBalance += creditedTutorAmount;
 
   await student.save(dbSession ? { session: dbSession } : undefined);
   await tutor.save(dbSession ? { session: dbSession } : undefined);
@@ -293,6 +353,11 @@ export const settleLockedSkillCoins = async ({
       balanceAfter: student.skillCoinBalance,
       lockedAfter: student.lockedSkillCoins,
       description,
+      metadata: {
+        grossAmount: amount,
+        tutorAmount: creditedTutorAmount,
+        commissionAmount,
+      },
       ...(sessionId ? { sessionId } : {}),
       ...(courseId ? { courseId } : {}),
       ...(dbSession ? { dbSession } : {}),
@@ -300,10 +365,15 @@ export const settleLockedSkillCoins = async ({
     recordWalletTransaction({
       userId: tutor._id,
       type: tutorTransactionType,
-      amount,
+      amount: creditedTutorAmount,
       balanceAfter: tutor.skillCoinBalance,
       lockedAfter: tutor.lockedSkillCoins,
       description,
+      metadata: {
+        grossAmount: amount,
+        tutorAmount: creditedTutorAmount,
+        commissionAmount,
+      },
       ...(sessionId ? { sessionId } : {}),
       ...(courseId ? { courseId } : {}),
       ...(dbSession ? { dbSession } : {}),

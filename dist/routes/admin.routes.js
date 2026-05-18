@@ -1,5 +1,5 @@
 import express from "express";
-import { adjustAdminUserSkillCoins, deleteAdminUser, deleteAdminCourse, deleteAdminReview, getAdminCourses, getAdminOverview, getAdminReviews, getAdminSessions, getAdminSupportConversations, getAdminSupportMessages, getAdminUsers, getAdminWalletTransactions, sendAdminSupportMessage, updateAdminCoursePublishStatus, updateAdminSupportStatus, } from "../controllers/admin.controller.js";
+import { adjustAdminUserSkillCoins, deleteAdminUser, deleteAdminCourse, deleteAdminReview, getAdminCourses, getAdminOverview, getAdminReviews, getAdminSessions, getAdminSupportConversations, getAdminSupportMessages, getAdminUsers, getAdminWithdrawalRequests, getAdminWalletTransactions, sendAdminSupportMessage, settleAdminSession, updateAdminCoursePublishStatus, updateAdminSupportStatus, updateAdminWithdrawalRequest, } from "../controllers/admin.controller.js";
 import { adminOnly } from "../middlewares/adminOnly.js";
 import { protect } from "../middlewares/protect.js";
 import { supportUpload } from "../middlewares/upload.js";
@@ -14,6 +14,7 @@ router.get("/courses", getAdminCourses);
 router.patch("/courses/:id/publish", updateAdminCoursePublishStatus);
 router.delete("/courses/:id", deleteAdminCourse);
 router.get("/sessions", getAdminSessions);
+router.patch("/sessions/:id/settle", settleAdminSession);
 router.get("/verifications", getAdminVerificationRequests);
 router.patch("/verifications/:id/review", reviewVerificationRequest);
 router.patch("/verifications/:id/deverify", deverifyVerificationRequest);
@@ -24,5 +25,7 @@ router.patch("/support/:id/status", updateAdminSupportStatus);
 router.get("/reviews", getAdminReviews);
 router.delete("/reviews/:id", deleteAdminReview);
 router.get("/wallet", getAdminWalletTransactions);
+router.get("/withdrawals", getAdminWithdrawalRequests);
+router.patch("/withdrawals/:id", updateAdminWithdrawalRequest);
 export default router;
 //# sourceMappingURL=admin.routes.js.map

@@ -13,9 +13,12 @@ export interface ISession extends Document {
     tutorReminderSentAt?: Date;
     tutorMarkedCompletedAt?: Date;
     studentConfirmedCompletionAt?: Date;
+    adminSettlementAt?: Date;
+    adminSettlementBy?: mongoose.Types.ObjectId;
+    adminSettlementNote?: string;
     hiddenFor: mongoose.Types.ObjectId[];
     skillCoinAmount: number;
-    coinStatus: "locked" | "released" | "settled";
+    coinStatus: "locked" | "awaiting_admin_release" | "released" | "settled";
     sessionKind: "single" | "tuition";
     billingType: "pay_per_session" | "included_in_tuition";
     status: "pending" | "accepted" | "completed" | "cancelled";

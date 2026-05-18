@@ -27,6 +27,12 @@ const SessionSchema = new Schema({
     tutorReminderSentAt: Date,
     tutorMarkedCompletedAt: Date,
     studentConfirmedCompletionAt: Date,
+    adminSettlementAt: Date,
+    adminSettlementBy: {
+        type: Schema.Types.ObjectId,
+        ref: "User",
+    },
+    adminSettlementNote: String,
     status: {
         type: String,
         enum: ["pending", "accepted", "completed", "cancelled"],
@@ -44,7 +50,7 @@ const SessionSchema = new Schema({
     },
     coinStatus: {
         type: String,
-        enum: ["locked", "released", "settled"],
+        enum: ["locked", "awaiting_admin_release", "released", "settled"],
         default: "locked",
     },
     sessionKind: {

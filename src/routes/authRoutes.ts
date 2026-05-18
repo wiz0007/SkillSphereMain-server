@@ -10,9 +10,11 @@ import {
   changePassword,
   deleteAccount,
   getCurrentUser,
+  getMyWithdrawalRequests,
   getPendingAdminGift,
   getWalletTransactions,
   getWalletProof,
+  requestWithdrawal,
   createWalletRechargeOrder,
   verifyWalletRecharge,
   claimAdminGift,
@@ -24,6 +26,7 @@ import {
   changePasswordSchema,
   deleteAccountSchema,
   forgotPasswordSchema,
+  requestWithdrawalSchema,
   rechargeSkillCoinSchema,
   resetPasswordSchema,
   verifyWalletRechargeSchema,
@@ -42,7 +45,15 @@ router.get("/me", protect, getCurrentUser);
 router.get("/admin-gifts/pending", protect, getPendingAdminGift);
 router.post("/admin-gifts/:giftId/claim", protect, claimAdminGift);
 router.get("/wallet/history", protect, getWalletTransactions);
+router.get("/wallet/withdrawals", protect, getMyWithdrawalRequests);
 router.get("/wallet/proof/:transactionId", protect, getWalletProof);
+router.post(
+  "/wallet/withdrawals",
+  protect,
+  loginLimiter,
+  validate(requestWithdrawalSchema),
+  requestWithdrawal
+);
 router.post(
   "/wallet/recharge-order",
   protect,

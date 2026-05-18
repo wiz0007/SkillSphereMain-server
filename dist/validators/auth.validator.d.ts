@@ -23,4 +23,9 @@ export declare const verifyWalletRechargeSchema: z.ZodObject<{
     razorpayPaymentId: z.ZodString;
     razorpaySignature: z.ZodString;
 }, z.core.$strip>;
+export declare const requestWithdrawalSchema: z.ZodObject<{
+    amount: z.ZodNumber;
+    upiId: z.ZodString;
+    note: z.ZodOptional<z.ZodString>;
+}, z.core.$strip>;
 //# sourceMappingURL=auth.validator.d.ts.map

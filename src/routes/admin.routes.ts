@@ -11,10 +11,13 @@ import {
   getAdminSupportConversations,
   getAdminSupportMessages,
   getAdminUsers,
+  getAdminWithdrawalRequests,
   getAdminWalletTransactions,
   sendAdminSupportMessage,
+  settleAdminSession,
   updateAdminCoursePublishStatus,
   updateAdminSupportStatus,
+  updateAdminWithdrawalRequest,
 } from "../controllers/admin.controller.js";
 import { adminOnly } from "../middlewares/adminOnly.js";
 import { protect } from "../middlewares/protect.js";
@@ -37,6 +40,7 @@ router.get("/courses", getAdminCourses);
 router.patch("/courses/:id/publish", updateAdminCoursePublishStatus);
 router.delete("/courses/:id", deleteAdminCourse);
 router.get("/sessions", getAdminSessions);
+router.patch("/sessions/:id/settle", settleAdminSession);
 router.get("/verifications", getAdminVerificationRequests);
 router.patch("/verifications/:id/review", reviewVerificationRequest);
 router.patch("/verifications/:id/deverify", deverifyVerificationRequest);
@@ -51,5 +55,7 @@ router.patch("/support/:id/status", updateAdminSupportStatus);
 router.get("/reviews", getAdminReviews);
 router.delete("/reviews/:id", deleteAdminReview);
 router.get("/wallet", getAdminWalletTransactions);
+router.get("/withdrawals", getAdminWithdrawalRequests);
+router.patch("/withdrawals/:id", updateAdminWithdrawalRequest);
 
 export default router;

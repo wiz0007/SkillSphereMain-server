@@ -6,6 +6,9 @@ export interface IWalletTransaction extends Document {
     | "recharge"
     | "admin_credit"
     | "admin_debit"
+    | "withdrawal_lock"
+    | "withdrawal_release"
+    | "withdrawal_spend"
     | "session_lock"
     | "session_unlock"
     | "session_spend"
@@ -51,6 +54,9 @@ const WalletTransactionSchema = new Schema<IWalletTransaction>(
         "recharge",
         "admin_credit",
         "admin_debit",
+        "withdrawal_lock",
+        "withdrawal_release",
+        "withdrawal_spend",
         "session_lock",
         "session_unlock",
         "session_spend",

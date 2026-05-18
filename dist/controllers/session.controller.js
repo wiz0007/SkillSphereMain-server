@@ -7,7 +7,7 @@ import TuitionEnrollment from "../models/TuitionEnrollment.js";
 import Message from "../models/Message.js";
 import { logActivity } from "../utils/activityLogger.js";
 import { emitNotification, emitWalletUpdate } from "../config/socket.js";
-import { buildWalletSummary, lockSkillCoins, settleLockedSkillCoins, unlockSkillCoins, } from "../utils/wallet.js";
+import { buildWalletSummary, lockSkillCoins, unlockSkillCoins, } from "../utils/wallet.js";
 import { ensureTuitionSessionsGenerated } from "../utils/tuition.js";
 const isValidObjectId = (id) => mongoose.Types.ObjectId.isValid(id);
 const getId = (param) => {
@@ -323,24 +323,16 @@ export const confirmSessionCompletion = async (req, res) => {
         }
         await dbSession.withTransaction(async () => {
             if (session.sessionKind !== "tuition") {
-                await settleLockedSkillCoins({
-                    student,
-                    tutor,
-                    amount: session.skillCoinAmount,
-                    sessionId: session._id,
-                    ...(session.course ? { courseId: session.course } : {}),
-                    description: `SkillCoin settled for session: ${session.title}`,
-                    dbSession: dbSession,
-                });
+                session.coinStatus = "awaiting_admin_release";
+            }
+            else {
+                session.coinStatus = "settled";
             }
             session.studentConfirmedCompletionAt = new Date();
-            session.coinStatus = "settled";
             await session.save({ session: dbSession });
         });
-        if (session.sessionKind !== "tuition") {
-            emitWalletUpdate(student._id.toString(), buildWalletSummary(student));
-            emitWalletUpdate(tutor._id.toString(), buildWalletSummary(tutor));
-        }
+        emitWalletUpdate(student._id.toString(), buildWalletSummary(student));
+        emitWalletUpdate(tutor._id.toString(), buildWalletSummary(tutor));
         const notification = await logActivity({
             user: session.tutor.toString(),
             type: "SESSION",
@@ -348,7 +340,7 @@ export const confirmSessionCompletion = async (req, res) => {
             entityId: session._id.toString(),
             message: session.sessionKind === "tuition"
                 ? "Student confirmed the tuition class as completed."
-                : "Student confirmed completion. SkillCoin released.",
+                : "Student confirmed completion. Session is waiting for admin release.",
         });
         emitNotification(session.tutor.toString(), notification);
         return res.json(session);

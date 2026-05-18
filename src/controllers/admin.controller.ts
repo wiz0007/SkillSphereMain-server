@@ -11,12 +11,19 @@ import Session from "../models/Session.js";
 import SupportConversation from "../models/SupportConversation.js";
 import SupportMessage from "../models/SupportMessage.js";
 import User from "../models/User.js";
+import WithdrawalRequest from "../models/WithdrawalRequest.js";
 import WalletRechargeOrder from "../models/WalletRechargeOrder.js";
 import WalletTransaction from "../models/WalletTransaction.js";
 import cloudinary from "../config/cloudinary.js";
 import { emitNotification, emitSupportMessage, emitWalletUpdate } from "../config/socket.js";
 import { logActivity } from "../utils/activityLogger.js";
-import { debitSkillCoins } from "../utils/wallet.js";
+import {
+  buildWalletSummary,
+  debitSkillCoins,
+  settleLockedSkillCoins,
+  spendLockedSkillCoins,
+  unlockSkillCoins,
+} from "../utils/wallet.js";
 
 const isValidObjectId = (id: string) => mongoose.Types.ObjectId.isValid(id);
 
@@ -93,6 +100,25 @@ const serializeSupportMessage = (
         mimeType: message.attachmentMimeType || "",
       }
       : null,
+});
+
+const serializeWithdrawalRequest = (
+  request: any,
+  profileMap: Map<string, any>
+) => ({
+  _id: request._id.toString(),
+  amount: request.amount,
+  upiId: request.upiId,
+  note: request.note || "",
+  status: request.status,
+  adminNote: request.adminNote || "",
+  reviewedAt: request.reviewedAt || null,
+  paidAt: request.paidAt || null,
+  createdAt: request.createdAt,
+  user: request.user ? serializeUser(request.user, profileMap) : null,
+  reviewedBy: request.reviewedBy
+    ? serializeUser(request.reviewedBy, profileMap)
+    : null,
 });
 
 const uploadSupportAttachment = async (file?: Express.Multer.File) => {
@@ -194,6 +220,7 @@ const deleteUserData = async (userId: mongoose.Types.ObjectId) => {
     SupportConversation.deleteMany({
       $or: [{ requester: userId }, { assignedTo: userId }],
     }),
+    WithdrawalRequest.deleteMany({ user: userId }),
     WalletRechargeOrder.deleteMany({ user: userId }),
     WalletTransaction.deleteMany({ user: userId }),
     Course.updateMany(
@@ -224,6 +251,8 @@ export const getAdminOverview: RequestHandler = async (_req, res) => {
       totalTutors,
       pendingSupportThreads,
       pendingSessions,
+      pendingWithdrawalRequests,
+      pendingAdminSettlementSessions,
       recordedCourses,
       liveCourses,
       tuitionCourses,
@@ -241,6 +270,12 @@ export const getAdminOverview: RequestHandler = async (_req, res) => {
         status: { $ne: "resolved" },
       }),
       Session.countDocuments({ status: "pending" }),
+      WithdrawalRequest.countDocuments({
+        status: { $in: ["pending", "processing"] },
+      }),
+      Session.countDocuments({
+        coinStatus: "awaiting_admin_release",
+      }),
       Course.countDocuments({ type: "recorded" }),
       Course.countDocuments({ type: "live" }),
       Course.countDocuments({ type: "tuition" }),
@@ -269,6 +304,8 @@ export const getAdminOverview: RequestHandler = async (_req, res) => {
         tuitionCourses,
         totalSessions,
         pendingSessions,
+        pendingWithdrawalRequests,
+        pendingAdminSettlementSessions,
         totalSupportThreads,
         pendingSupportThreads,
         totalReviews,
@@ -550,6 +587,8 @@ export const getAdminSessions: RequestHandler = async (_req, res) => {
         price: session.price,
         skillCoinAmount: session.skillCoinAmount,
         coinStatus: session.coinStatus,
+        adminSettlementAt: session.adminSettlementAt || null,
+        adminSettlementNote: session.adminSettlementNote || "",
         date: session.date,
         duration: session.duration,
         student: serializeUser(session.student, profileMap),
@@ -566,6 +605,346 @@ export const getAdminSessions: RequestHandler = async (_req, res) => {
   } catch (error: any) {
     console.error("ADMIN SESSIONS ERROR:", error);
     return res.status(500).json({ message: "Failed to fetch sessions" });
+  }
+};
+
+export const settleAdminSession: RequestHandler = async (req, res) => {
+  let dbSession: mongoose.ClientSession | null = null;
+
+  try {
+    const id = getId(req.params.id);
+    const actorId = req.userId;
+    const action = String(req.body.action || "").trim();
+    const note = String(req.body.note || "").trim();
+
+    if (!actorId) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+
+    if (!isValidObjectId(id)) {
+      return res.status(400).json({ message: "Invalid session ID" });
+    }
+
+    if (!["release", "refund"].includes(action)) {
+      return res.status(400).json({ message: "Invalid settlement action" });
+    }
+
+    dbSession = await mongoose.startSession();
+    let sessionPayload: any = null;
+    let studentWallet: any = null;
+    let tutorWallet: any = null;
+    let notifyUserId = "";
+    let notifyMessage = "";
+
+    await dbSession.withTransaction(async () => {
+      const session = await Session.findById(id).session(dbSession);
+
+      if (!session) {
+        throw new Error("Session not found");
+      }
+
+      if (session.coinStatus !== "awaiting_admin_release") {
+        throw new Error("This session is not waiting for admin settlement");
+      }
+
+      const [student, tutor] = await Promise.all([
+        User.findById(session.student).session(dbSession),
+        User.findById(session.tutor).session(dbSession),
+      ]);
+
+      if (!student || !tutor) {
+        throw new Error("Session participants could not be found");
+      }
+
+      if (action === "release") {
+        const grossAmount = session.skillCoinAmount;
+        const tutorAmount = Math.floor(grossAmount * 0.9);
+        const commissionAmount = grossAmount - tutorAmount;
+
+        const result = await settleLockedSkillCoins({
+          student,
+          tutor,
+          amount: grossAmount,
+          tutorAmount,
+          sessionId: session._id,
+          ...(session.course ? { courseId: session.course } : {}),
+          description: `SkillCoin settled for session: ${session.title} (tutor ${tutorAmount} SC, platform commission ${commissionAmount} SC)`,
+          ...(dbSession ? { dbSession } : {}),
+        });
+
+        studentWallet = result.student;
+        tutorWallet = result.tutor;
+        notifyUserId = session.tutor.toString();
+        notifyMessage = `Admin released ${tutorAmount} SkillCoin for "${session.title}" after platform commission.`;
+        session.coinStatus = "settled";
+      } else {
+        studentWallet = await unlockSkillCoins(
+          student,
+          session.skillCoinAmount,
+          `SkillCoin returned after admin dispute review: ${session.title}`,
+          {
+            sessionId: session._id,
+            ...(session.course ? { courseId: session.course } : {}),
+            extra: {
+              disputeRefund: true,
+              adminNote: note,
+            },
+          },
+          dbSession || undefined,
+          "session_unlock"
+        );
+
+        tutorWallet = buildWalletSummary(tutor);
+        notifyUserId = session.student.toString();
+        notifyMessage = `Admin returned the locked SkillCoin for "${session.title}" after review.`;
+        session.coinStatus = "released";
+      }
+
+      session.adminSettlementAt = new Date();
+      session.adminSettlementBy = new mongoose.Types.ObjectId(actorId);
+      session.adminSettlementNote = note;
+      await session.save({ session: dbSession });
+
+      sessionPayload = {
+        _id: session._id.toString(),
+        coinStatus: session.coinStatus,
+        adminSettlementAt: session.adminSettlementAt,
+        adminSettlementNote: session.adminSettlementNote || "",
+      };
+    });
+
+      const settledSession = await Session.findById(id).lean();
+      if (settledSession) {
+        if (studentWallet) {
+          emitWalletUpdate(settledSession.student.toString(), studentWallet);
+        }
+        if (tutorWallet) {
+          emitWalletUpdate(settledSession.tutor.toString(), tutorWallet);
+        }
+      }
+
+    if (notifyUserId && notifyMessage) {
+      const notification = await logActivity({
+        user: notifyUserId,
+        type: "SESSION",
+        action: action === "release" ? "ADMIN_RELEASED" : "DISPUTE_REFUNDED",
+        entityId: id,
+        message: notifyMessage,
+        ...(note ? { metadata: { note } } : {}),
+      });
+
+      if (notification) {
+        emitNotification(notifyUserId, notification);
+      }
+    }
+
+    return res.json({
+      message:
+        action === "release"
+          ? "Session payout released to tutor"
+          : "Session refunded to student",
+      session: settledSession
+        ? {
+            _id: settledSession._id.toString(),
+            coinStatus: settledSession.coinStatus,
+            adminSettlementAt: settledSession.adminSettlementAt || null,
+            adminSettlementNote: settledSession.adminSettlementNote || "",
+          }
+        : sessionPayload,
+    });
+  } catch (error: any) {
+    console.error("ADMIN SETTLE SESSION ERROR:", error);
+    return res.status(500).json({
+      message: error?.message || "Failed to settle session",
+    });
+  } finally {
+    await dbSession?.endSession();
+  }
+};
+
+export const getAdminWithdrawalRequests: RequestHandler = async (_req, res) => {
+  try {
+    const requests = await WithdrawalRequest.find()
+      .populate(
+        "user",
+        "username email isAdmin identityVerificationStatus tutorVerificationStatus verifiedBadgeLevel profileCompleted isVerified skillCoinBalance lockedSkillCoins createdAt"
+      )
+      .populate(
+        "reviewedBy",
+        "username email isAdmin identityVerificationStatus tutorVerificationStatus verifiedBadgeLevel profileCompleted isVerified skillCoinBalance lockedSkillCoins createdAt"
+      )
+      .sort({ createdAt: -1 })
+      .limit(120)
+      .lean();
+
+    const profileMap = await getProfileMap(
+      requests.flatMap((request) => [
+        request.user?._id?.toString?.() || "",
+        request.reviewedBy?._id?.toString?.() || "",
+      ])
+    );
+
+    return res.json(
+      requests.map((request) => serializeWithdrawalRequest(request, profileMap))
+    );
+  } catch (error: any) {
+    console.error("ADMIN WITHDRAWALS ERROR:", error);
+    return res.status(500).json({
+      message: "Failed to fetch withdrawal requests",
+    });
+  }
+};
+
+export const updateAdminWithdrawalRequest: RequestHandler = async (req, res) => {
+  let dbSession: mongoose.ClientSession | null = null;
+
+  try {
+    const id = getId(req.params.id);
+    const actorId = req.userId;
+    const status = String(req.body.status || "").trim();
+    const adminNote = String(req.body.adminNote || "").trim();
+
+    if (!actorId) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+
+    if (!isValidObjectId(id)) {
+      return res.status(400).json({ message: "Invalid withdrawal request ID" });
+    }
+
+    if (!["processing", "paid", "rejected"].includes(status)) {
+      return res.status(400).json({ message: "Invalid withdrawal status" });
+    }
+
+    dbSession = await mongoose.startSession();
+    let updatedRequest: any = null;
+    let walletSummary: any = null;
+    let notificationUserId = "";
+    let notificationMessage = "";
+
+    await dbSession.withTransaction(async () => {
+      const request = await WithdrawalRequest.findById(id).session(dbSession);
+
+      if (!request) {
+        throw new Error("Withdrawal request not found");
+      }
+
+      if (request.status === "paid" || request.status === "rejected") {
+        throw new Error("This withdrawal request is already closed");
+      }
+
+      const user = await User.findById(request.user).session(dbSession);
+
+      if (!user) {
+        throw new Error("Withdrawal user not found");
+      }
+
+      if (status === "processing") {
+        request.status = "processing";
+        notificationUserId = user._id.toString();
+        notificationMessage = `Your withdrawal request for ${request.amount} SC is being processed.`;
+      } else if (status === "paid") {
+        walletSummary = await spendLockedSkillCoins(
+          user,
+          request.amount,
+          `SkillCoin withdrawn to ${request.upiId}`,
+          {
+            extra: {
+              upiId: request.upiId,
+              withdrawalRequestId: request._id.toString(),
+              adminNote,
+            },
+          },
+          dbSession || undefined,
+          "withdrawal_spend"
+        );
+
+        request.status = "paid";
+        request.paidAt = new Date();
+        notificationUserId = user._id.toString();
+        notificationMessage = `Your withdrawal request for ${request.amount} SC has been marked paid by admin.`;
+      } else {
+        walletSummary = await unlockSkillCoins(
+          user,
+          request.amount,
+          `SkillCoin released after withdrawal rejection for ${request.upiId}`,
+          {
+            extra: {
+              upiId: request.upiId,
+              withdrawalRequestId: request._id.toString(),
+              adminNote,
+            },
+          },
+          dbSession || undefined,
+          "withdrawal_release"
+        );
+
+        request.status = "rejected";
+        notificationUserId = user._id.toString();
+        notificationMessage = `Your withdrawal request for ${request.amount} SC was rejected and the locked SkillCoin has been released back to your wallet.`;
+      }
+
+      request.reviewedBy = new mongoose.Types.ObjectId(actorId);
+      request.reviewedAt = new Date();
+      request.adminNote = adminNote || null;
+      await request.save({ session: dbSession });
+
+      updatedRequest = request;
+    });
+
+    const populatedRequest = await WithdrawalRequest.findById(id)
+      .populate(
+        "user",
+        "username email isAdmin identityVerificationStatus tutorVerificationStatus verifiedBadgeLevel profileCompleted isVerified skillCoinBalance lockedSkillCoins createdAt"
+      )
+      .populate(
+        "reviewedBy",
+        "username email isAdmin identityVerificationStatus tutorVerificationStatus verifiedBadgeLevel profileCompleted isVerified skillCoinBalance lockedSkillCoins createdAt"
+      )
+      .lean();
+
+    if (walletSummary && populatedRequest?.user?._id) {
+      emitWalletUpdate(populatedRequest.user._id.toString(), walletSummary);
+    }
+
+    if (notificationUserId && notificationMessage) {
+      const notification = await logActivity({
+        user: notificationUserId,
+        type: "WALLET",
+        action: `WITHDRAWAL_${status.toUpperCase()}`,
+        entityId: id,
+        message: notificationMessage,
+        ...(adminNote ? { metadata: { adminNote } } : {}),
+      });
+
+      if (notification) {
+        emitNotification(notificationUserId, notification);
+      }
+    }
+
+    const profileMap = await getProfileMap(
+      populatedRequest
+        ? [
+            populatedRequest.user?._id?.toString?.() || "",
+            populatedRequest.reviewedBy?._id?.toString?.() || "",
+          ]
+        : []
+    );
+
+    return res.json({
+      message: `Withdrawal request marked ${status}`,
+      request: populatedRequest
+        ? serializeWithdrawalRequest(populatedRequest, profileMap)
+        : updatedRequest,
+      wallet: walletSummary,
+    });
+  } catch (error: any) {
+    console.error("ADMIN UPDATE WITHDRAWAL ERROR:", error);
+    return res.status(500).json({
+      message: error?.message || "Failed to update withdrawal request",
+    });
+  } finally {
+    await dbSession?.endSession();
   }
 };
 

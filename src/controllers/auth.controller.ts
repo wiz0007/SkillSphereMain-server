@@ -10,6 +10,7 @@ import CourseReview from "../models/CourseReview.js";
 import Session from "../models/Session.js";
 import Activity from "../models/Activity.js";
 import AdminGift from "../models/AdminGift.js";
+import WithdrawalRequest from "../models/WithdrawalRequest.js";
 import WalletRechargeOrder from "../models/WalletRechargeOrder.js";
 import { emitWalletUpdate } from "../config/socket.js";
 import { syncAdminAccess } from "../middlewares/adminOnly.js";
@@ -20,6 +21,9 @@ import {
   buildWalletSummary,
   creditSkillCoins,
   getRecentWalletTransactions,
+  lockSkillCoins,
+  spendLockedSkillCoins,
+  unlockSkillCoins,
 } from "../utils/wallet.js";
 
 const generateToken = (id: string) => {
@@ -736,6 +740,132 @@ export const getWalletTransactions: RequestHandler = async (req, res) => {
   }
 };
 
+export const requestWithdrawal: RequestHandler = async (req, res) => {
+  let dbSession: mongoose.ClientSession | null = null;
+
+  try {
+    const userId = req.userId;
+    const amount = Math.round(Number(req.body.amount));
+    const upiId = String(req.body.upiId || "").trim().toLowerCase();
+    const note = String(req.body.note || "").trim();
+
+    if (!userId) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+
+    if (!Number.isFinite(amount) || amount <= 0) {
+      return res.status(400).json({ message: "Invalid withdrawal amount" });
+    }
+
+    if (!upiId) {
+      return res.status(400).json({ message: "UPI ID is required" });
+    }
+
+    dbSession = await mongoose.startSession();
+    let wallet: ReturnType<typeof buildWalletSummary> | null = null;
+    let request: any = null;
+
+    await dbSession.withTransaction(async () => {
+      const user = await User.findById(userId).session(dbSession);
+
+      if (!user) {
+        throw new Error("User not found");
+      }
+
+      await lockSkillCoins(
+        user,
+        amount,
+        `SkillCoin locked for withdrawal request to ${upiId}`,
+        {
+          extra: {
+            upiId,
+            note,
+          },
+        },
+        dbSession || undefined,
+        "withdrawal_lock"
+      );
+
+      const [createdRequest] = await WithdrawalRequest.create(
+        [
+          {
+            user: user._id,
+            amount,
+            upiId,
+            note,
+            status: "pending",
+          },
+        ],
+        { session: dbSession }
+      );
+
+      request = createdRequest;
+      wallet = buildWalletSummary(user);
+    });
+
+    if (!wallet || !request) {
+      return res.status(500).json({ message: "Failed to create withdrawal request" });
+    }
+
+    emitWalletUpdate(userId, wallet);
+
+    return res.status(201).json({
+      message: "Withdrawal request submitted",
+      wallet,
+      request: {
+        _id: request._id.toString(),
+        amount: request.amount,
+        upiId: request.upiId,
+        note: request.note || "",
+        status: request.status,
+        createdAt: request.createdAt,
+      },
+    });
+  } catch (error: any) {
+    console.error("REQUEST WITHDRAWAL ERROR:", error);
+    return res.status(500).json({
+      message: error?.message || "Failed to create withdrawal request",
+    });
+  } finally {
+    await dbSession?.endSession();
+  }
+};
+
+export const getMyWithdrawalRequests: RequestHandler = async (req, res) => {
+  try {
+    const userId = req.userId;
+
+    if (!userId) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+
+    const requests = await WithdrawalRequest.find({
+      user: new mongoose.Types.ObjectId(userId),
+    })
+      .sort({ createdAt: -1 })
+      .lean();
+
+    return res.json(
+      requests.map((request) => ({
+        _id: request._id.toString(),
+        amount: request.amount,
+        upiId: request.upiId,
+        note: request.note || "",
+        status: request.status,
+        adminNote: request.adminNote || "",
+        reviewedAt: request.reviewedAt || null,
+        paidAt: request.paidAt || null,
+        createdAt: request.createdAt,
+      }))
+    );
+  } catch (error: any) {
+    console.error("GET WITHDRAWALS ERROR:", error);
+    return res.status(500).json({
+      message: "Failed to fetch withdrawal requests",
+    });
+  }
+};
+
 export const getWalletProof: RequestHandler = async (req, res) => {
   try {
     const userId = req.userId;
@@ -934,6 +1064,7 @@ export const deleteAccount: RequestHandler = async (req, res) => {
       Profile.deleteOne({ user: user._id }),
       Course.deleteMany({ tutor: user._id }),
       CourseReview.deleteMany({ user: user._id }),
+      WithdrawalRequest.deleteMany({ user: user._id }),
       Course.updateMany(
         {},
         {

@@ -16,9 +16,12 @@ export interface ISession extends Document {
   tutorReminderSentAt?: Date;
   tutorMarkedCompletedAt?: Date;
   studentConfirmedCompletionAt?: Date;
+  adminSettlementAt?: Date;
+  adminSettlementBy?: mongoose.Types.ObjectId;
+  adminSettlementNote?: string;
   hiddenFor: mongoose.Types.ObjectId[];
   skillCoinAmount: number;
-  coinStatus: "locked" | "released" | "settled";
+  coinStatus: "locked" | "awaiting_admin_release" | "released" | "settled";
   sessionKind: "single" | "tuition";
   billingType: "pay_per_session" | "included_in_tuition";
 
@@ -58,6 +61,12 @@ const SessionSchema = new Schema<ISession>(
     tutorReminderSentAt: Date,
     tutorMarkedCompletedAt: Date,
     studentConfirmedCompletionAt: Date,
+    adminSettlementAt: Date,
+    adminSettlementBy: {
+      type: Schema.Types.ObjectId,
+      ref: "User",
+    },
+    adminSettlementNote: String,
 
     status: {
       type: String,
@@ -79,7 +88,7 @@ const SessionSchema = new Schema<ISession>(
 
     coinStatus: {
       type: String,
-      enum: ["locked", "released", "settled"],
+      enum: ["locked", "awaiting_admin_release", "released", "settled"],
       default: "locked",
     },
     sessionKind: {

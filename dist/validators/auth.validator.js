@@ -27,4 +27,14 @@ export const verifyWalletRechargeSchema = z.object({
     razorpayPaymentId: z.string().min(1),
     razorpaySignature: z.string().min(1),
 });
+export const requestWithdrawalSchema = z.object({
+    amount: z.number().min(1).max(1000000),
+    upiId: z
+        .string()
+        .trim()
+        .min(3)
+        .max(100)
+        .regex(/^[a-zA-Z0-9.\-_]{2,}@[a-zA-Z]{2,}$/i, "Invalid UPI ID"),
+    note: z.string().trim().max(300).optional(),
+});
 //# sourceMappingURL=auth.validator.js.map

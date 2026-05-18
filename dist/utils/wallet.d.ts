@@ -2,7 +2,7 @@ import mongoose from "mongoose";
 import { type IUser } from "../models/User.js";
 type WalletTransactionInput = {
     userId: mongoose.Types.ObjectId | string;
-    type: "recharge" | "admin_credit" | "admin_debit" | "session_lock" | "session_unlock" | "session_spend" | "session_earn" | "tuition_lock" | "tuition_unlock" | "tuition_spend" | "tuition_earn" | "recorded_course_lock" | "recorded_course_unlock" | "recorded_course_spend" | "recorded_course_earn";
+    type: "recharge" | "admin_credit" | "admin_debit" | "withdrawal_lock" | "withdrawal_release" | "withdrawal_spend" | "session_lock" | "session_unlock" | "session_spend" | "session_earn" | "tuition_lock" | "tuition_unlock" | "tuition_spend" | "tuition_earn" | "recorded_course_lock" | "recorded_course_unlock" | "recorded_course_spend" | "recorded_course_earn";
     amount: number;
     balanceAfter: number;
     lockedAfter: number;
@@ -41,7 +41,7 @@ export declare const lockSkillCoins: (user: IUser, amount: number, description: 
     sessionId?: mongoose.Types.ObjectId | string;
     courseId?: mongoose.Types.ObjectId | string;
     extra?: Record<string, unknown>;
-}, dbSession?: mongoose.ClientSession, transactionType?: "session_lock" | "tuition_lock" | "recorded_course_lock") => Promise<{
+}, dbSession?: mongoose.ClientSession, transactionType?: "withdrawal_lock" | "session_lock" | "tuition_lock" | "recorded_course_lock") => Promise<{
     skillCoinBalance: number;
     lockedSkillCoins: number;
     availableSkillCoins: number;
@@ -50,15 +50,25 @@ export declare const unlockSkillCoins: (user: IUser, amount: number, description
     sessionId?: mongoose.Types.ObjectId | string;
     courseId?: mongoose.Types.ObjectId | string;
     extra?: Record<string, unknown>;
-}, dbSession?: mongoose.ClientSession, transactionType?: "session_unlock" | "tuition_unlock" | "recorded_course_unlock") => Promise<{
+}, dbSession?: mongoose.ClientSession, transactionType?: "withdrawal_release" | "session_unlock" | "tuition_unlock" | "recorded_course_unlock") => Promise<{
     skillCoinBalance: number;
     lockedSkillCoins: number;
     availableSkillCoins: number;
 }>;
-export declare const settleLockedSkillCoins: ({ student, tutor, amount, sessionId, courseId, description, dbSession, studentTransactionType, tutorTransactionType, }: {
+export declare const spendLockedSkillCoins: (user: IUser, amount: number, description: string, metadata?: {
+    sessionId?: mongoose.Types.ObjectId | string;
+    courseId?: mongoose.Types.ObjectId | string;
+    extra?: Record<string, unknown>;
+}, dbSession?: mongoose.ClientSession, transactionType?: "withdrawal_spend" | "session_spend" | "tuition_spend" | "recorded_course_spend") => Promise<{
+    skillCoinBalance: number;
+    lockedSkillCoins: number;
+    availableSkillCoins: number;
+}>;
+export declare const settleLockedSkillCoins: ({ student, tutor, amount, tutorAmount, sessionId, courseId, description, dbSession, studentTransactionType, tutorTransactionType, }: {
     student: IUser;
     tutor: IUser;
     amount: number;
+    tutorAmount?: number;
     sessionId?: mongoose.Types.ObjectId | string;
     courseId?: mongoose.Types.ObjectId | string;
     description: string;
