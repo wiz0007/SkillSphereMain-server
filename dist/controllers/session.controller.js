@@ -4,6 +4,7 @@ import Profile from "../models/Profile.js";
 import Course from "../models/Course.js";
 import User from "../models/User.js";
 import TuitionEnrollment from "../models/TuitionEnrollment.js";
+import Message from "../models/Message.js";
 import { logActivity } from "../utils/activityLogger.js";
 import { emitNotification, emitWalletUpdate } from "../config/socket.js";
 import { buildWalletSummary, lockSkillCoins, settleLockedSkillCoins, unlockSkillCoins, } from "../utils/wallet.js";
@@ -116,13 +117,14 @@ export const createSession = async (req, res) => {
                     rupeesEquivalent: skillCoinAmount,
                 },
             }, dbSession);
+            const requestNote = typeof message === "string" ? message.trim() : "";
             const [sessionDoc] = await Session.create([
                 {
                     course: course._id,
                     student: new mongoose.Types.ObjectId(userId),
                     tutor: tutorId,
                     title: course.title,
-                    description: message,
+                    description: requestNote,
                     date,
                     duration,
                     price,
@@ -134,6 +136,18 @@ export const createSession = async (req, res) => {
                 },
             ], { session: dbSession });
             createdSession = sessionDoc;
+            const initialMessage = requestNote ||
+                `Session request for "${course.title}" on ${new Date(date).toLocaleString("en-IN", {
+                    dateStyle: "medium",
+                    timeStyle: "short",
+                })} for ${duration} minutes.`;
+            await Message.create([
+                {
+                    sender: new mongoose.Types.ObjectId(userId),
+                    recipient: tutorId,
+                    text: initialMessage,
+                },
+            ], { session: dbSession });
         });
         if (!createdSession) {
             return res.status(500).json({ message: "Error creating session" });
