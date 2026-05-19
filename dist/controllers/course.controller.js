@@ -62,6 +62,7 @@ const normalizeCourseData = (body) => {
             : [],
         price: !isNaN(Number(body.price)) ? Number(body.price) : 0,
         duration: body.duration?.trim(),
+        demoVideoUrl: body.demoVideoUrl?.trim() || "",
         contentDriveLink: type === "recorded" ? body.contentDriveLink?.trim() || "" : "",
         tuitionSchedule: type === "tuition"
             ? normalizeTuitionSchedule(body.tuitionSchedule)

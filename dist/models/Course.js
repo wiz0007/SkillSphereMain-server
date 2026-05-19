@@ -46,6 +46,11 @@ const CourseSchema = new Schema({
         default: "",
         trim: true,
     },
+    demoVideoUrl: {
+        type: String,
+        default: "",
+        trim: true,
+    },
     tuitionSchedule: {
         type: TuitionScheduleSchema,
         default: () => ({

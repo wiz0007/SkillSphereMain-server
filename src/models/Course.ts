@@ -10,6 +10,7 @@ export interface ICourse extends Document {
   price: number;
   duration: string;
   contentDriveLink?: string;
+  demoVideoUrl?: string;
   tuitionSchedule?: {
     days: string[];
     weeks: number[];
@@ -71,6 +72,11 @@ const CourseSchema = new Schema<ICourse>(
     },
     duration: String,
     contentDriveLink: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+    demoVideoUrl: {
       type: String,
       default: "",
       trim: true,

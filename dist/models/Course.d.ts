@@ -9,6 +9,7 @@ export interface ICourse extends Document {
     price: number;
     duration: string;
     contentDriveLink?: string;
+    demoVideoUrl?: string;
     tuitionSchedule?: {
         days: string[];
         weeks: number[];
