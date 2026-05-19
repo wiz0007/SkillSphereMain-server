@@ -11,6 +11,7 @@ export declare const createCourseSchema: z.ZodObject<{
     skills: z.ZodDefault<z.ZodArray<z.ZodString>>;
     price: z.ZodPipe<z.ZodUnion<readonly [z.ZodNumber, z.ZodString]>, z.ZodTransform<number, string | number>>;
     duration: z.ZodString;
+    demoVideoUrl: z.ZodUnion<[z.ZodOptional<z.ZodString>, z.ZodLiteral<"">]>;
     contentDriveLink: z.ZodUnion<[z.ZodOptional<z.ZodString>, z.ZodLiteral<"">]>;
     tuitionSchedule: z.ZodOptional<z.ZodObject<{
         days: z.ZodDefault<z.ZodArray<z.ZodString>>;

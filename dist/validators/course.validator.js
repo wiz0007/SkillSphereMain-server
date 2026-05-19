@@ -13,6 +13,7 @@ export const createCourseSchema = z.object({
         message: "Invalid price",
     }),
     duration: z.string().min(1),
+    demoVideoUrl: z.string().trim().optional().or(z.literal("")),
     contentDriveLink: z.string().trim().optional().or(z.literal("")),
     tuitionSchedule: z
         .object({
