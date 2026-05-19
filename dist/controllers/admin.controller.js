@@ -1012,6 +1012,7 @@ export const getAdminWalletTransactions = async (_req, res) => {
             lockedAfter: transaction.lockedAfter,
             auditStatus: transaction.auditStatus,
             chainTxHash: transaction.chainTxHash || null,
+            network: transaction.network || null,
             createdAt: transaction.createdAt,
             user: serializeUser(transaction.user, profileMap),
         })));

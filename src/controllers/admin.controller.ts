@@ -1247,20 +1247,21 @@ export const getAdminWalletTransactions: RequestHandler = async (_req, res) => {
       transactions.map((transaction) => transaction.user?._id?.toString?.() || "")
     );
 
-    return res.json(
-      transactions.map((transaction) => ({
-        _id: transaction._id.toString(),
-        type: transaction.type,
-        amount: transaction.amount,
-        description: transaction.description,
-        balanceAfter: transaction.balanceAfter,
-        lockedAfter: transaction.lockedAfter,
-        auditStatus: transaction.auditStatus,
-        chainTxHash: transaction.chainTxHash || null,
-        createdAt: (transaction as any).createdAt,
-        user: serializeUser(transaction.user, profileMap),
-      }))
-    );
+      return res.json(
+        transactions.map((transaction) => ({
+          _id: transaction._id.toString(),
+          type: transaction.type,
+          amount: transaction.amount,
+          description: transaction.description,
+          balanceAfter: transaction.balanceAfter,
+          lockedAfter: transaction.lockedAfter,
+          auditStatus: transaction.auditStatus,
+          chainTxHash: transaction.chainTxHash || null,
+          network: transaction.network || null,
+          createdAt: (transaction as any).createdAt,
+          user: serializeUser(transaction.user, profileMap),
+        }))
+      );
   } catch (error: any) {
     console.error("ADMIN WALLET ERROR:", error);
     return res.status(500).json({ message: "Failed to fetch wallet activity" });
