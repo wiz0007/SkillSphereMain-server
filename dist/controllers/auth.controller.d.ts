@@ -1,6 +1,9 @@
 import type { RequestHandler } from "express";
+type SocialProvider = "google" | "linkedin" | "github";
 export declare const register: RequestHandler;
 export declare const login: RequestHandler;
+export declare const startSocialLogin: (provider: SocialProvider) => RequestHandler;
+export declare const handleSocialCallback: (provider: SocialProvider) => RequestHandler;
 export declare const verifyOTP: RequestHandler;
 export declare const resendOTP: RequestHandler;
 export declare const forgotPassword: RequestHandler;
@@ -18,4 +21,5 @@ export declare const getWalletProof: RequestHandler;
 export declare const getPendingAdminGift: RequestHandler;
 export declare const claimAdminGift: RequestHandler;
 export declare const deleteAccount: RequestHandler;
+export {};
 //# sourceMappingURL=auth.controller.d.ts.map

@@ -1,5 +1,5 @@
 import express from "express";
-import { register, login, verifyOTP, checkUsername, resendOTP, forgotPassword, resetPassword, changePassword, deleteAccount, getCurrentUser, getMyWithdrawalRequests, getPendingAdminGift, getWalletTransactions, getWalletProof, requestWithdrawal, createWalletRechargeOrder, verifyWalletRecharge, claimAdminGift, } from "../controllers/auth.controller.js";
+import { register, login, startSocialLogin, handleSocialCallback, verifyOTP, checkUsername, resendOTP, forgotPassword, resetPassword, changePassword, deleteAccount, getCurrentUser, getMyWithdrawalRequests, getPendingAdminGift, getWalletTransactions, getWalletProof, requestWithdrawal, createWalletRechargeOrder, verifyWalletRecharge, claimAdminGift, } from "../controllers/auth.controller.js";
 import { loginLimiter, otpLimiter, registerLimiter } from "../middlewares/rateLimiter.js";
 import { protect } from "../middlewares/protect.js";
 import { validate } from "../middlewares/validate.js";
@@ -7,6 +7,12 @@ import { changePasswordSchema, deleteAccountSchema, forgotPasswordSchema, reques
 const router = express.Router();
 router.post("/register", registerLimiter, register);
 router.post("/login", loginLimiter, login);
+router.get("/google/start", startSocialLogin("google"));
+router.get("/google/callback", handleSocialCallback("google"));
+router.get("/linkedin/start", startSocialLogin("linkedin"));
+router.get("/linkedin/callback", handleSocialCallback("linkedin"));
+router.get("/github/start", startSocialLogin("github"));
+router.get("/github/callback", handleSocialCallback("github"));
 router.post("/verify-otp", otpLimiter, verifyOTP);
 router.post("/resend-otp", otpLimiter, resendOTP);
 router.post("/forgot-password", loginLimiter, validate(forgotPasswordSchema), forgotPassword);

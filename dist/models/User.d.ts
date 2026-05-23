@@ -3,6 +3,10 @@ export interface IUser extends Document {
     username: string;
     email: string;
     password: string;
+    authProvider: "local" | "google" | "linkedin" | "github";
+    googleId?: string | null;
+    linkedinId?: string | null;
+    githubId?: string | null;
     profileCompleted: boolean;
     isVerified: boolean;
     identityVerificationStatus: "not_started" | "pending" | "approved" | "rejected" | "resubmission_required";

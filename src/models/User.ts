@@ -4,6 +4,10 @@ export interface IUser extends Document {
   username: string;
   email: string;
   password: string;
+  authProvider: "local" | "google" | "linkedin" | "github";
+  googleId?: string | null;
+  linkedinId?: string | null;
+  githubId?: string | null;
   profileCompleted: boolean;
   isVerified: boolean;
   identityVerificationStatus:
@@ -54,6 +58,33 @@ const UserSchema = new Schema<IUser>(
     password: {
       type: String,
       required: true,
+    },
+
+    authProvider: {
+      type: String,
+      enum: ["local", "google", "linkedin", "github"],
+      default: "local",
+    },
+
+    googleId: {
+      type: String,
+      default: null,
+      index: true,
+      sparse: true,
+    },
+
+    linkedinId: {
+      type: String,
+      default: null,
+      index: true,
+      sparse: true,
+    },
+
+    githubId: {
+      type: String,
+      default: null,
+      index: true,
+      sparse: true,
     },
 
     profileCompleted: {

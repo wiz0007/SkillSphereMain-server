@@ -2,6 +2,8 @@ import express from "express";
 import {
   register,
   login,
+  startSocialLogin,
+  handleSocialCallback,
   verifyOTP,
   checkUsername,
   resendOTP,
@@ -36,6 +38,12 @@ const router = express.Router();
 
 router.post("/register", registerLimiter, register);
 router.post("/login", loginLimiter, login);
+router.get("/google/start", startSocialLogin("google"));
+router.get("/google/callback", handleSocialCallback("google"));
+router.get("/linkedin/start", startSocialLogin("linkedin"));
+router.get("/linkedin/callback", handleSocialCallback("linkedin"));
+router.get("/github/start", startSocialLogin("github"));
+router.get("/github/callback", handleSocialCallback("github"));
 router.post("/verify-otp", otpLimiter, verifyOTP);
 router.post("/resend-otp", otpLimiter, resendOTP);
 router.post("/forgot-password", loginLimiter, validate(forgotPasswordSchema), forgotPassword);

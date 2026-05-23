@@ -18,6 +18,29 @@ const UserSchema = new Schema({
         type: String,
         required: true,
     },
+    authProvider: {
+        type: String,
+        enum: ["local", "google", "linkedin", "github"],
+        default: "local",
+    },
+    googleId: {
+        type: String,
+        default: null,
+        index: true,
+        sparse: true,
+    },
+    linkedinId: {
+        type: String,
+        default: null,
+        index: true,
+        sparse: true,
+    },
+    githubId: {
+        type: String,
+        default: null,
+        index: true,
+        sparse: true,
+    },
     profileCompleted: {
         type: Boolean,
         default: false,

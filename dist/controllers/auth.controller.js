@@ -15,6 +15,7 @@ import { emitWalletUpdate } from "../config/socket.js";
 import { syncAdminAccess } from "../middlewares/adminOnly.js";
 import { generateOTP } from "../utils/generateOtp.js";
 import { sendOTPEmail, sendPasswordResetEmail } from "../utils/sendEmail.js";
+import { sendWelcomeEmail } from "../utils/emailNotifications.js";
 import { getWalletTransactionProof } from "../services/auditAnchor.service.js";
 import { buildWalletSummary, creditSkillCoins, getRecentWalletTransactions, lockSkillCoins, spendLockedSkillCoins, unlockSkillCoins, } from "../utils/wallet.js";
 const generateToken = (id) => {
@@ -38,6 +39,300 @@ const getFrontendBaseUrl = (req) => {
         return originHeader.replace(/\/$/, "");
     }
     return "https://skillsphere.space";
+};
+const getBackendBaseUrl = (req) => {
+    const configuredBase = process.env.BACKEND_URL || process.env.API_URL || process.env.SERVER_URL;
+    if (configuredBase) {
+        return configuredBase.replace(/\/$/, "");
+    }
+    const forwardedProto = req.headers["x-forwarded-proto"];
+    const protocol = typeof forwardedProto === "string" && forwardedProto.trim()
+        ? forwardedProto.split(",")[0]
+        : req.protocol;
+    return `${protocol}://${req.get("host")}`;
+};
+const SOCIAL_PROVIDER_CONFIG = {
+    google: {
+        clientIdEnv: "GOOGLE_CLIENT_ID",
+        clientSecretEnv: "GOOGLE_CLIENT_SECRET",
+        authorizationUrl: "https://accounts.google.com/o/oauth2/v2/auth",
+        scopes: ["openid", "email", "profile"],
+    },
+    linkedin: {
+        clientIdEnv: "LINKEDIN_CLIENT_ID",
+        clientSecretEnv: "LINKEDIN_CLIENT_SECRET",
+        authorizationUrl: "https://www.linkedin.com/oauth/v2/authorization",
+        scopes: ["openid", "profile", "email"],
+    },
+    github: {
+        clientIdEnv: "GITHUB_CLIENT_ID",
+        clientSecretEnv: "GITHUB_CLIENT_SECRET",
+        authorizationUrl: "https://github.com/login/oauth/authorize",
+        scopes: ["read:user", "user:email"],
+    },
+};
+const getSocialCallbackUrl = (req, provider) => `${getBackendBaseUrl(req)}/api/auth/${provider}/callback`;
+const buildSocialState = (provider, req) => jwt.sign({
+    provider,
+    next: typeof req.query.next === "string" && req.query.next.trim()
+        ? req.query.next
+        : "",
+}, process.env.JWT_SECRET, { expiresIn: "15m" });
+const verifySocialState = (state, provider) => {
+    if (!state) {
+        throw new Error("Missing OAuth state");
+    }
+    const decoded = jwt.verify(state, process.env.JWT_SECRET);
+    if (decoded.provider !== provider) {
+        throw new Error("OAuth provider mismatch");
+    }
+    return decoded;
+};
+const redirectToSocialCallback = ({ req, token, profileCompleted, error, }) => {
+    const frontendBase = getFrontendBaseUrl(req);
+    const hash = new URLSearchParams();
+    if (token) {
+        hash.set("token", token);
+    }
+    if (typeof profileCompleted === "boolean") {
+        hash.set("profileCompleted", String(profileCompleted));
+    }
+    if (error) {
+        hash.set("error", error);
+    }
+    return `${frontendBase}/social-auth/callback#${hash.toString()}`;
+};
+const getRandomPasswordHash = async () => bcrypt.hash(crypto.randomBytes(24).toString("hex"), 10);
+const sanitizeUsernameBase = (value) => {
+    const normalized = value
+        .toLowerCase()
+        .replace(/[^a-z0-9_]/g, "_")
+        .replace(/_+/g, "_")
+        .replace(/^_+|_+$/g, "");
+    if (!normalized) {
+        return "skillsphere_user";
+    }
+    return normalized.length >= 3 ? normalized : `${normalized}_user`;
+};
+const reserveUniqueUsername = async (usernameHint, email) => {
+    const emailBase = sanitizeUsernameBase(email.split("@")[0] || "user");
+    const base = sanitizeUsernameBase(usernameHint || emailBase).slice(0, 24);
+    let candidate = base;
+    let suffix = 0;
+    while (await User.exists({ username: candidate })) {
+        suffix += 1;
+        candidate = `${base.slice(0, Math.max(3, 24 - String(suffix).length - 1))}_${suffix}`;
+    }
+    return candidate;
+};
+const findUserByProviderId = async (provider, providerId) => {
+    if (provider === "google") {
+        return User.findOne({ googleId: providerId });
+    }
+    if (provider === "linkedin") {
+        return User.findOne({ linkedinId: providerId });
+    }
+    return User.findOne({ githubId: providerId });
+};
+const attachProviderToUser = async (user, provider, providerId) => {
+    user.authProvider = provider;
+    user.isVerified = true;
+    user.otp = null;
+    user.otpExpires = null;
+    if (provider === "google") {
+        user.googleId = providerId;
+    }
+    else if (provider === "linkedin") {
+        user.linkedinId = providerId;
+    }
+    else {
+        user.githubId = providerId;
+    }
+    await user.save();
+    return user;
+};
+const upsertSocialUser = async (profile) => {
+    const normalizedEmail = profile.email.trim().toLowerCase();
+    let user = await findUserByProviderId(profile.provider, profile.providerId);
+    if (!user) {
+        user = await User.findOne({ email: normalizedEmail });
+    }
+    let isNewUser = false;
+    if (!user) {
+        isNewUser = true;
+        const username = await reserveUniqueUsername(profile.usernameHint || profile.fullName || normalizedEmail, normalizedEmail);
+        user = await User.create({
+            username,
+            email: normalizedEmail,
+            password: await getRandomPasswordHash(),
+            authProvider: profile.provider,
+            googleId: profile.provider === "google" ? profile.providerId : null,
+            linkedinId: profile.provider === "linkedin" ? profile.providerId : null,
+            githubId: profile.provider === "github" ? profile.providerId : null,
+            isVerified: true,
+        });
+    }
+    else {
+        user = await attachProviderToUser(user, profile.provider, profile.providerId);
+    }
+    if (isNewUser) {
+        sendWelcomeEmail({
+            to: normalizedEmail,
+            name: profile.fullName || profile.usernameHint || user.username,
+        }).catch((error) => {
+            console.error("SOCIAL WELCOME EMAIL ERROR:", error);
+        });
+    }
+    const profileDoc = await Profile.findOne({ user: user._id });
+    return {
+        user,
+        profile: profileDoc,
+        token: generateToken(user._id.toString()),
+    };
+};
+const exchangeGoogleCode = async (req, code) => {
+    const clientId = process.env.GOOGLE_CLIENT_ID;
+    const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
+    if (!clientId || !clientSecret) {
+        throw new Error("Google OAuth is not configured");
+    }
+    const tokenParams = new URLSearchParams({
+        code,
+        client_id: clientId,
+        client_secret: clientSecret,
+        redirect_uri: getSocialCallbackUrl(req, "google"),
+        grant_type: "authorization_code",
+    });
+    const tokenResponse = await fetch("https://oauth2.googleapis.com/token", {
+        method: "POST",
+        headers: { "content-type": "application/x-www-form-urlencoded" },
+        body: tokenParams.toString(),
+    });
+    if (!tokenResponse.ok) {
+        throw new Error("Failed to exchange Google authorization code");
+    }
+    const tokenPayload = (await tokenResponse.json());
+    const userResponse = await fetch("https://openidconnect.googleapis.com/v1/userinfo", {
+        headers: {
+            authorization: `Bearer ${tokenPayload.access_token}`,
+        },
+    });
+    if (!userResponse.ok) {
+        throw new Error("Failed to fetch Google user profile");
+    }
+    const userPayload = (await userResponse.json());
+    if (!userPayload.email || userPayload.email_verified === false) {
+        throw new Error("Google account email is unavailable or not verified");
+    }
+    return {
+        provider: "google",
+        providerId: userPayload.sub,
+        email: userPayload.email,
+        usernameHint: userPayload.given_name || userPayload.name || userPayload.email,
+        ...(userPayload.name ? { fullName: userPayload.name } : {}),
+    };
+};
+const exchangeLinkedInCode = async (req, code) => {
+    const clientId = process.env.LINKEDIN_CLIENT_ID;
+    const clientSecret = process.env.LINKEDIN_CLIENT_SECRET;
+    if (!clientId || !clientSecret) {
+        throw new Error("LinkedIn OAuth is not configured");
+    }
+    const tokenParams = new URLSearchParams({
+        grant_type: "authorization_code",
+        code,
+        redirect_uri: getSocialCallbackUrl(req, "linkedin"),
+        client_id: clientId,
+        client_secret: clientSecret,
+    });
+    const tokenResponse = await fetch("https://www.linkedin.com/oauth/v2/accessToken", {
+        method: "POST",
+        headers: { "content-type": "application/x-www-form-urlencoded" },
+        body: tokenParams.toString(),
+    });
+    if (!tokenResponse.ok) {
+        throw new Error("Failed to exchange LinkedIn authorization code");
+    }
+    const tokenPayload = (await tokenResponse.json());
+    const userResponse = await fetch("https://api.linkedin.com/v2/userinfo", {
+        headers: {
+            authorization: `Bearer ${tokenPayload.access_token}`,
+        },
+    });
+    if (!userResponse.ok) {
+        throw new Error("Failed to fetch LinkedIn user profile");
+    }
+    const userPayload = (await userResponse.json());
+    if (!userPayload.email) {
+        throw new Error("LinkedIn account email is unavailable");
+    }
+    return {
+        provider: "linkedin",
+        providerId: userPayload.sub,
+        email: userPayload.email,
+        usernameHint: userPayload.given_name || userPayload.name || userPayload.email,
+        ...(userPayload.name ? { fullName: userPayload.name } : {}),
+    };
+};
+const exchangeGithubCode = async (req, code) => {
+    const clientId = process.env.GITHUB_CLIENT_ID;
+    const clientSecret = process.env.GITHUB_CLIENT_SECRET;
+    if (!clientId || !clientSecret) {
+        throw new Error("GitHub OAuth is not configured");
+    }
+    const tokenParams = new URLSearchParams({
+        client_id: clientId,
+        client_secret: clientSecret,
+        code,
+        redirect_uri: getSocialCallbackUrl(req, "github"),
+    });
+    const tokenResponse = await fetch("https://github.com/login/oauth/access_token", {
+        method: "POST",
+        headers: {
+            accept: "application/json",
+            "content-type": "application/x-www-form-urlencoded",
+        },
+        body: tokenParams.toString(),
+    });
+    if (!tokenResponse.ok) {
+        throw new Error("Failed to exchange GitHub authorization code");
+    }
+    const tokenPayload = (await tokenResponse.json());
+    const [userResponse, emailsResponse] = await Promise.all([
+        fetch("https://api.github.com/user", {
+            headers: {
+                authorization: `Bearer ${tokenPayload.access_token}`,
+                accept: "application/vnd.github+json",
+                "user-agent": "SkillSphere",
+            },
+        }),
+        fetch("https://api.github.com/user/emails", {
+            headers: {
+                authorization: `Bearer ${tokenPayload.access_token}`,
+                accept: "application/vnd.github+json",
+                "user-agent": "SkillSphere",
+            },
+        }),
+    ]);
+    if (!userResponse.ok || !emailsResponse.ok) {
+        throw new Error("Failed to fetch GitHub user profile");
+    }
+    const userPayload = (await userResponse.json());
+    const emailsPayload = (await emailsResponse.json());
+    const primaryEmail = emailsPayload.find((entry) => entry.primary && entry.verified)?.email ||
+        emailsPayload.find((entry) => entry.verified)?.email ||
+        userPayload.email ||
+        "";
+    if (!primaryEmail) {
+        throw new Error("GitHub account email is unavailable");
+    }
+    return {
+        provider: "github",
+        providerId: String(userPayload.id),
+        email: primaryEmail,
+        usernameHint: userPayload.login || userPayload.name || primaryEmail,
+        ...(userPayload.name ? { fullName: userPayload.name } : {}),
+    };
 };
 const RECHARGE_BONUS_OFFERS = [
     {
@@ -92,9 +387,15 @@ const verifyRazorpaySignature = ({ orderId, paymentId, signature, }) => {
     return generatedSignature === signature;
 };
 const toSafeUser = (user, profile) => {
-    const { password, otp, otpExpires, passwordResetToken, passwordResetExpires, otpAttempts, lockUntil, __v, ...safeUser } = user;
+    const { password, otp, otpExpires, passwordResetToken, passwordResetExpires, googleId, linkedinId, githubId, otpAttempts, lockUntil, __v, ...safeUser } = user;
     return {
         ...safeUser,
+        authProvider: user.authProvider || "local",
+        linkedProviders: {
+            google: Boolean(user.googleId),
+            linkedin: Boolean(user.linkedinId),
+            github: Boolean(user.githubId),
+        },
         isTutor: profile?.isTutor || false,
         profilePhoto: profile?.profilePhoto || "",
         isAdmin: Boolean(user.isAdmin),
@@ -186,6 +487,74 @@ export const login = async (req, res) => {
         console.error("LOGIN ERROR:", error);
         return res.status(500).json({ message: "Login failed" });
     }
+};
+export const startSocialLogin = (provider) => {
+    return async (req, res) => {
+        try {
+            const providerConfig = SOCIAL_PROVIDER_CONFIG[provider];
+            const clientId = process.env[providerConfig.clientIdEnv];
+            const clientSecret = process.env[providerConfig.clientSecretEnv];
+            if (!clientId || !clientSecret) {
+                return res.redirect(redirectToSocialCallback({
+                    req,
+                    error: `${provider}_oauth_not_configured`,
+                }));
+            }
+            const authorizationUrl = new URL(providerConfig.authorizationUrl);
+            authorizationUrl.searchParams.set("client_id", clientId);
+            authorizationUrl.searchParams.set("redirect_uri", getSocialCallbackUrl(req, provider));
+            authorizationUrl.searchParams.set("scope", providerConfig.scopes.join(" "));
+            authorizationUrl.searchParams.set("state", buildSocialState(provider, req));
+            if (provider === "google") {
+                authorizationUrl.searchParams.set("response_type", "code");
+                authorizationUrl.searchParams.set("access_type", "offline");
+                authorizationUrl.searchParams.set("prompt", "select_account");
+            }
+            else if (provider === "linkedin") {
+                authorizationUrl.searchParams.set("response_type", "code");
+            }
+            else {
+                authorizationUrl.searchParams.set("allow_signup", "true");
+            }
+            return res.redirect(authorizationUrl.toString());
+        }
+        catch (error) {
+            console.error(`${provider.toUpperCase()} START ERROR:`, error);
+            return res.redirect(redirectToSocialCallback({
+                req,
+                error: `${provider}_oauth_start_failed`,
+            }));
+        }
+    };
+};
+export const handleSocialCallback = (provider) => {
+    return async (req, res) => {
+        try {
+            verifySocialState(typeof req.query.state === "string" ? req.query.state : undefined, provider);
+            const code = typeof req.query.code === "string" ? req.query.code : "";
+            if (!code) {
+                throw new Error("Missing authorization code");
+            }
+            const socialProfile = provider === "google"
+                ? await exchangeGoogleCode(req, code)
+                : provider === "linkedin"
+                    ? await exchangeLinkedInCode(req, code)
+                    : await exchangeGithubCode(req, code);
+            const { token, profile } = await upsertSocialUser(socialProfile);
+            return res.redirect(redirectToSocialCallback({
+                req,
+                token,
+                profileCompleted: Boolean(profile),
+            }));
+        }
+        catch (error) {
+            console.error(`${provider.toUpperCase()} CALLBACK ERROR:`, error);
+            return res.redirect(redirectToSocialCallback({
+                req,
+                error: error?.message || `${provider}_oauth_failed`,
+            }));
+        }
+    };
 };
 export const verifyOTP = async (req, res) => {
     try {
