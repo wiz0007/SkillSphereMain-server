@@ -18,6 +18,10 @@ const UserSchema = new Schema({
         type: String,
         required: true,
     },
+    hasPassword: {
+        type: Boolean,
+        default: true,
+    },
     authProvider: {
         type: String,
         enum: ["local", "google", "linkedin", "github"],

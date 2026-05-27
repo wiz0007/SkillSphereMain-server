@@ -1,6 +1,6 @@
 import { z } from "zod";
 export declare const changePasswordSchema: z.ZodObject<{
-    currentPassword: z.ZodString;
+    currentPassword: z.ZodOptional<z.ZodString>;
     newPassword: z.ZodString;
 }, z.core.$strip>;
 export declare const deleteAccountSchema: z.ZodObject<{

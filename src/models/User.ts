@@ -4,6 +4,7 @@ export interface IUser extends Document {
   username: string;
   email: string;
   password: string;
+  hasPassword: boolean;
   authProvider: "local" | "google" | "linkedin" | "github";
   googleId?: string | null;
   linkedinId?: string | null;
@@ -58,6 +59,11 @@ const UserSchema = new Schema<IUser>(
     password: {
       type: String,
       required: true,
+    },
+
+    hasPassword: {
+      type: Boolean,
+      default: true,
     },
 
     authProvider: {

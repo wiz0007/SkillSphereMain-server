@@ -217,6 +217,11 @@ const reserveUniqueUsername = async (
   return candidate;
 };
 
+const resolveHasPassword = (user: Record<string, any>) =>
+  typeof user.hasPassword === "boolean"
+    ? user.hasPassword
+    : (user.authProvider || "local") === "local";
+
 const findUserByProviderId = async (
   provider: SocialProvider,
   providerId: string
@@ -276,6 +281,7 @@ const upsertSocialUser = async (profile: SocialProfile) => {
       username,
       email: normalizedEmail,
       password: await getRandomPasswordHash(),
+      hasPassword: false,
       authProvider: profile.provider,
       googleId: profile.provider === "google" ? profile.providerId : null,
       linkedinId:
@@ -632,6 +638,7 @@ const toSafeUser = (
   return {
     ...safeUser,
     authProvider: user.authProvider || "local",
+    hasPassword: resolveHasPassword(user),
     linkedProviders: {
       google: Boolean(user.googleId),
       linkedin: Boolean(user.linkedinId),
@@ -679,6 +686,7 @@ export const register: RequestHandler = async (req, res) => {
       username: normalizedUsername,
       email,
       password: hashedPassword,
+      hasPassword: true,
       otp: await bcrypt.hash(otp, 10),
       otpExpires: new Date(Date.now() + 10 * 60 * 1000),
       otpAttempts: 0,
@@ -998,6 +1006,7 @@ export const resetPassword: RequestHandler = async (req, res) => {
     }
 
     user.password = await bcrypt.hash(newPassword, 10);
+    user.hasPassword = true;
     user.passwordResetToken = null;
     user.passwordResetExpires = null;
     user.lockUntil = null;
@@ -1040,17 +1049,28 @@ export const changePassword: RequestHandler = async (req, res) => {
       return res.status(401).json({ message: "Unauthorized" });
     }
 
-    const { currentPassword, newPassword } = req.body;
+    const currentPassword = String(req.body.currentPassword || "");
+    const newPassword = String(req.body.newPassword || "");
     const user = await User.findById(userId);
 
     if (!user) {
       return res.status(404).json({ message: "User not found" });
     }
 
-    const isMatch = await bcrypt.compare(currentPassword, user.password);
+    const hadPasswordBefore = resolveHasPassword(user.toObject());
 
-    if (!isMatch) {
-      return res.status(400).json({ message: "Current password is incorrect" });
+    if (hadPasswordBefore) {
+      if (!currentPassword) {
+        return res.status(400).json({
+          message: "Current password is required",
+        });
+      }
+
+      const isMatch = await bcrypt.compare(currentPassword, user.password);
+
+      if (!isMatch) {
+        return res.status(400).json({ message: "Current password is incorrect" });
+      }
     }
 
     const isSamePassword = await bcrypt.compare(newPassword, user.password);
@@ -1062,9 +1082,14 @@ export const changePassword: RequestHandler = async (req, res) => {
     }
 
     user.password = await bcrypt.hash(newPassword, 10);
+    user.hasPassword = true;
     await user.save();
 
-    return res.json({ message: "Password updated successfully" });
+    return res.json({
+      message: hadPasswordBefore
+        ? "Password updated successfully"
+        : "Password set successfully. You can now sign in with email and password too.",
+    });
   } catch (error: any) {
     console.error("CHANGE PASSWORD ERROR:", error);
     return res.status(500).json({ message: "Failed to update password" });

@@ -1,6 +1,6 @@
 import { z } from "zod";
 export const changePasswordSchema = z.object({
-    currentPassword: z.string().min(1),
+    currentPassword: z.string().trim().optional(),
     newPassword: z
         .string()
         .regex(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&]).{8,}$/, "Weak password"),
