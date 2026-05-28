@@ -1,19 +1,37 @@
 import type { UploadApiOptions, UploadApiResponse } from "cloudinary";
 import cloudinary from "../config/cloudinary.js";
 
-const hasCloudinaryConfig = () =>
-  Boolean(
-    process.env.CLOUDINARY_CLOUD_NAME &&
-      process.env.CLOUDINARY_API_KEY &&
-      process.env.CLOUDINARY_API_SECRET
-  );
+const getCloudinaryConfigStatus = () => {
+  const entries = {
+    CLOUDINARY_CLOUD_NAME: process.env.CLOUDINARY_CLOUD_NAME,
+    CLOUDINARY_API_KEY: process.env.CLOUDINARY_API_KEY,
+    CLOUDINARY_API_SECRET: process.env.CLOUDINARY_API_SECRET,
+  };
+
+  return Object.fromEntries(
+    Object.entries(entries).map(([key, value]) => [
+      key,
+      Boolean(value?.trim()),
+    ])
+  ) as Record<keyof typeof entries, boolean>;
+};
 
 export const uploadMulterFile = async (
   file: Express.Multer.File,
   options: UploadApiOptions = {}
 ): Promise<UploadApiResponse> => {
-  if (!hasCloudinaryConfig()) {
-    throw new Error("Cloudinary upload is not configured on the server");
+  const configStatus = getCloudinaryConfigStatus();
+  const missingKeys = Object.entries(configStatus)
+    .filter(([, present]) => !present)
+    .map(([key]) => key);
+
+  if (missingKeys.length) {
+    console.error("CLOUDINARY CONFIG MISSING:", configStatus);
+    throw new Error(
+      `Cloudinary upload is not configured on the server. Missing: ${missingKeys.join(
+        ", "
+      )}`
+    );
   }
 
   if (file.buffer?.length) {
