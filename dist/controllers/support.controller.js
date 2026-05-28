@@ -1,10 +1,10 @@
 import mongoose from "mongoose";
-import cloudinary from "../config/cloudinary.js";
 import Profile from "../models/Profile.js";
 import SupportConversation from "../models/SupportConversation.js";
 import SupportMessage from "../models/SupportMessage.js";
 import User from "../models/User.js";
 import { emitSupportMessage } from "../config/socket.js";
+import { uploadMulterFile } from "../utils/cloudinaryUpload.js";
 const SUPPORT_TOPICS = [
     "Payment issue",
     "SkillCoin wallet",
@@ -107,7 +107,7 @@ const uploadSupportAttachment = async (file) => {
     if (!file) {
         return null;
     }
-    const result = await cloudinary.uploader.upload(file.path, {
+    const result = await uploadMulterFile(file, {
         resource_type: "auto",
         folder: "skillsphere/support",
     });

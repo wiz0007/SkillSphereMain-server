@@ -2,7 +2,7 @@ import type { RequestHandler } from "express";
 import mongoose from "mongoose";
 import Profile, { type IProfile } from "../models/Profile.js";
 import User from "../models/User.js";
-import cloudinary from "../config/cloudinary.js";
+import { uploadMulterFile } from "../utils/cloudinaryUpload.js";
 
 const toSafeUser = (user: Record<string, any>) => {
   const {
@@ -372,7 +372,10 @@ export const uploadPhoto: RequestHandler = async (req, res) => {
       });
     }
 
-    const result = await cloudinary.uploader.upload(req.file.path);
+    const result = await uploadMulterFile(req.file, {
+      folder: "skillsphere/profiles",
+      resource_type: "image",
+    });
 
     return res.json({
       imageUrl: result.secure_url,

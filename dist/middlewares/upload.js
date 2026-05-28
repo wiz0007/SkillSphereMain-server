@@ -1,5 +1,5 @@
 import multer from "multer";
-const storage = multer.diskStorage({});
+const storage = multer.memoryStorage();
 const imageFileFilter = (req, file, cb) => {
     if (!file.mimetype.startsWith("image/")) {
         return cb(new Error("Only images allowed"));
@@ -13,6 +13,26 @@ export const upload = multer({
     },
     fileFilter: imageFileFilter,
 });
+export const handleUpload = (middleware) => (req, res, next) => {
+    middleware(req, res, (error) => {
+        if (!error) {
+            next();
+            return;
+        }
+        if (error instanceof multer.MulterError) {
+            const message = error.code === "LIMIT_FILE_SIZE"
+                ? "File is too large"
+                : error.message || "Upload failed";
+            res.status(400).json({ message });
+            return;
+        }
+        if (error instanceof Error) {
+            res.status(400).json({ message: error.message });
+            return;
+        }
+        res.status(400).json({ message: "Upload failed" });
+    });
+};
 const SUPPORT_ATTACHMENT_TYPES = new Set([
     "image/jpeg",
     "image/png",

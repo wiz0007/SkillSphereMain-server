@@ -1,12 +1,12 @@
 import type { RequestHandler } from "express";
 import mongoose from "mongoose";
-import cloudinary from "../config/cloudinary.js";
 import Profile from "../models/Profile.js";
 import User from "../models/User.js";
 import VerificationRequest, {
   type VerificationRequestStatus,
   type VerificationRequestType,
 } from "../models/VerificationRequest.js";
+import { uploadMulterFile } from "../utils/cloudinaryUpload.js";
 
 const VALID_IDENTITY_TYPES = [
   "aadhaar",
@@ -69,7 +69,7 @@ const uploadVerificationAsset = async (file?: Express.Multer.File) => {
     return null;
   }
 
-  const result = await cloudinary.uploader.upload(file.path, {
+  const result = await uploadMulterFile(file, {
     resource_type: "auto",
     folder: "skillsphere/verifications",
   });

@@ -13,9 +13,9 @@ import User from "../models/User.js";
 import WithdrawalRequest from "../models/WithdrawalRequest.js";
 import WalletRechargeOrder from "../models/WalletRechargeOrder.js";
 import WalletTransaction from "../models/WalletTransaction.js";
-import cloudinary from "../config/cloudinary.js";
 import { emitNotification, emitSupportMessage, emitWalletUpdate } from "../config/socket.js";
 import { logActivity } from "../utils/activityLogger.js";
+import { uploadMulterFile } from "../utils/cloudinaryUpload.js";
 import { buildWalletSummary, debitSkillCoins, settleLockedSkillCoins, spendLockedSkillCoins, unlockSkillCoins, } from "../utils/wallet.js";
 const isValidObjectId = (id) => mongoose.Types.ObjectId.isValid(id);
 const getId = (param) => {
@@ -101,7 +101,7 @@ const uploadSupportAttachment = async (file) => {
     if (!file) {
         return null;
     }
-    const result = await cloudinary.uploader.upload(file.path, {
+    const result = await uploadMulterFile(file, {
         resource_type: "auto",
         folder: "skillsphere/support",
     });

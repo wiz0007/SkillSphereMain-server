@@ -1,8 +1,8 @@
 import mongoose from "mongoose";
-import cloudinary from "../config/cloudinary.js";
 import Profile from "../models/Profile.js";
 import User from "../models/User.js";
 import VerificationRequest, {} from "../models/VerificationRequest.js";
+import { uploadMulterFile } from "../utils/cloudinaryUpload.js";
 const VALID_IDENTITY_TYPES = [
     "aadhaar",
     "pan",
@@ -55,7 +55,7 @@ const uploadVerificationAsset = async (file) => {
     if (!file) {
         return null;
     }
-    const result = await cloudinary.uploader.upload(file.path, {
+    const result = await uploadMulterFile(file, {
         resource_type: "auto",
         folder: "skillsphere/verifications",
     });

@@ -1,6 +1,7 @@
 import multer from "multer";
+import type { RequestHandler } from "express";
 
-const storage = multer.diskStorage({});
+const storage = multer.memoryStorage();
 
 const imageFileFilter: multer.Options["fileFilter"] = (req, file, cb) => {
   if (!file.mimetype.startsWith("image/")) {
@@ -16,6 +17,34 @@ export const upload = multer({
   },
   fileFilter: imageFileFilter,
 });
+
+export const handleUpload =
+  (middleware: RequestHandler): RequestHandler =>
+  (req, res, next) => {
+    middleware(req, res, (error: unknown) => {
+      if (!error) {
+        next();
+        return;
+      }
+
+      if (error instanceof multer.MulterError) {
+        const message =
+          error.code === "LIMIT_FILE_SIZE"
+            ? "File is too large"
+            : error.message || "Upload failed";
+
+        res.status(400).json({ message });
+        return;
+      }
+
+      if (error instanceof Error) {
+        res.status(400).json({ message: error.message });
+        return;
+      }
+
+      res.status(400).json({ message: "Upload failed" });
+    });
+  };
 
 const SUPPORT_ATTACHMENT_TYPES = new Set([
   "image/jpeg",

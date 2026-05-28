@@ -13,7 +13,7 @@ import {
   submitTutorVerification,
 } from "../controllers/verification.controller.js";
 import { protect } from "../middlewares/protect.js";
-import { upload, verificationUpload } from "../middlewares/upload.js";
+import { handleUpload, upload, verificationUpload } from "../middlewares/upload.js";
 import { validate } from "../middlewares/validate.js";
 import {
   createProfileSchema,
@@ -28,7 +28,7 @@ router.get("/me", protect, getMyProfile);
 router.post(
   "/upload-photo",
   protect,
-  upload.single("profilePhoto"),
+  handleUpload(upload.single("profilePhoto")),
   uploadPhoto
 );
 router.post("/become-tutor", protect, validate(tutorSchema), becomeTutor);
@@ -38,17 +38,19 @@ router.get("/verification", protect, getVerificationSummary);
 router.post(
   "/verification/identity",
   protect,
-  verificationUpload.fields([
+  handleUpload(verificationUpload.fields([
     { name: "documentFront", maxCount: 1 },
     { name: "documentBack", maxCount: 1 },
     { name: "selfie", maxCount: 1 },
-  ]),
+  ])),
   submitIdentityVerification
 );
 router.post(
   "/verification/tutor",
   protect,
-  verificationUpload.fields([{ name: "supportingDocument", maxCount: 1 }]),
+  handleUpload(
+    verificationUpload.fields([{ name: "supportingDocument", maxCount: 1 }])
+  ),
   submitTutorVerification
 );
 

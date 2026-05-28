@@ -21,7 +21,7 @@ import {
 } from "../controllers/admin.controller.js";
 import { adminOnly } from "../middlewares/adminOnly.js";
 import { protect } from "../middlewares/protect.js";
-import { supportUpload } from "../middlewares/upload.js";
+import { handleUpload, supportUpload } from "../middlewares/upload.js";
 import {
   deverifyVerificationRequest,
   getAdminVerificationRequests,
@@ -48,7 +48,7 @@ router.get("/support", getAdminSupportConversations);
 router.get("/support/:id/messages", getAdminSupportMessages);
 router.post(
   "/support/:id/messages",
-  supportUpload.single("attachment"),
+  handleUpload(supportUpload.single("attachment")),
   sendAdminSupportMessage
 );
 router.patch("/support/:id/status", updateAdminSupportStatus);

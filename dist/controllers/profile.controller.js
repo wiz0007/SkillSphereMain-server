@@ -1,7 +1,7 @@
 import mongoose from "mongoose";
 import Profile, {} from "../models/Profile.js";
 import User from "../models/User.js";
-import cloudinary from "../config/cloudinary.js";
+import { uploadMulterFile } from "../utils/cloudinaryUpload.js";
 const toSafeUser = (user) => {
     const { password, otp, otpExpires, otpAttempts, lockUntil, __v, ...safeUser } = user;
     return safeUser;
@@ -268,7 +268,10 @@ export const uploadPhoto = async (req, res) => {
                 message: "No file uploaded",
             });
         }
-        const result = await cloudinary.uploader.upload(req.file.path);
+        const result = await uploadMulterFile(req.file, {
+            folder: "skillsphere/profiles",
+            resource_type: "image",
+        });
         return res.json({
             imageUrl: result.secure_url,
         });
