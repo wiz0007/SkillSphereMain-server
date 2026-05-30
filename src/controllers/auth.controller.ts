@@ -17,6 +17,7 @@ import { syncAdminAccess } from "../middlewares/adminOnly.js";
 import { generateOTP } from "../utils/generateOtp.js";
 import { sendOTPEmail, sendPasswordResetEmail } from "../utils/sendEmail.js";
 import { sendWelcomeEmail } from "../utils/emailNotifications.js";
+import { clearAuthCookie, setAuthCookie } from "../utils/authCookie.js";
 import { getWalletTransactionProof } from "../services/auditAnchor.service.js";
 import {
   buildWalletSummary,
@@ -155,21 +156,15 @@ const verifySocialState = (
 
 const redirectToSocialCallback = ({
   req,
-  token,
   profileCompleted,
   error,
 }: {
   req: Parameters<RequestHandler>[0];
-  token?: string;
   profileCompleted?: boolean;
   error?: string;
 }) => {
   const frontendBase = getFrontendBaseUrl(req);
   const hash = new URLSearchParams();
-
-  if (token) {
-    hash.set("token", token);
-  }
 
   if (typeof profileCompleted === "boolean") {
     hash.set("profileCompleted", String(profileCompleted));
@@ -747,8 +742,10 @@ export const login: RequestHandler = async (req, res) => {
 
     const refreshedUser = await User.findById(user._id);
 
+    const token = generateToken(user._id.toString());
+    setAuthCookie(res, token);
+
     return res.json({
-      token: generateToken(user._id.toString()),
       user: toSafeUser((refreshedUser || user).toObject(), {
         isTutor: profile?.isTutor,
         profilePhoto: profile?.profilePhoto,
@@ -836,11 +833,11 @@ export const handleSocialCallback = (
             : await exchangeGithubCode(req, code);
 
       const { token, profile } = await upsertSocialUser(socialProfile);
+      setAuthCookie(res, token);
 
       return res.redirect(
         redirectToSocialCallback({
           req,
-          token,
           profileCompleted: Boolean(profile),
         })
       );
@@ -854,6 +851,11 @@ export const handleSocialCallback = (
       );
     }
   };
+};
+
+export const logout: RequestHandler = (_req, res) => {
+  clearAuthCookie(res);
+  return res.json({ message: "Logged out successfully" });
 };
 
 export const verifyOTP: RequestHandler = async (req, res) => {
@@ -1708,6 +1710,8 @@ export const deleteAccount: RequestHandler = async (req, res) => {
     }
 
     await user.deleteOne();
+
+    clearAuthCookie(res);
 
     return res.json({ message: "Account deleted successfully" });
   } catch (error: any) {

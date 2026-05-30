@@ -1,15 +1,10 @@
 import type { RequestHandler } from "express";
 import jwt, { type JwtPayload } from "jsonwebtoken";
+import { getAuthTokenFromRequest } from "../utils/authCookie.js";
 
 export const optionalAuth: RequestHandler = (req, _res, next) => {
   try {
-    const authHeader = req.headers.authorization;
-
-    if (!authHeader || !authHeader.startsWith("Bearer ")) {
-      return next();
-    }
-
-    const token = authHeader.split(" ")[1];
+    const token = getAuthTokenFromRequest(req);
 
     if (!token) {
       return next();

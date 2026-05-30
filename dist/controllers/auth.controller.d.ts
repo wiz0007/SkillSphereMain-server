@@ -4,6 +4,7 @@ export declare const register: RequestHandler;
 export declare const login: RequestHandler;
 export declare const startSocialLogin: (provider: SocialProvider) => RequestHandler;
 export declare const handleSocialCallback: (provider: SocialProvider) => RequestHandler;
+export declare const logout: RequestHandler;
 export declare const verifyOTP: RequestHandler;
 export declare const resendOTP: RequestHandler;
 export declare const forgotPassword: RequestHandler;

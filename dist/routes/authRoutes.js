@@ -1,12 +1,15 @@
 import express from "express";
-import { register, login, startSocialLogin, handleSocialCallback, verifyOTP, checkUsername, resendOTP, forgotPassword, resetPassword, changePassword, deleteAccount, getCurrentUser, getMyWithdrawalRequests, getPendingAdminGift, getWalletTransactions, getWalletProof, requestWithdrawal, createWalletRechargeOrder, verifyWalletRecharge, claimAdminGift, } from "../controllers/auth.controller.js";
+import { register, login, logout, startSocialLogin, handleSocialCallback, verifyOTP, checkUsername, resendOTP, forgotPassword, resetPassword, changePassword, deleteAccount, getCurrentUser, getMyWithdrawalRequests, getPendingAdminGift, getWalletTransactions, getWalletProof, requestWithdrawal, createWalletRechargeOrder, verifyWalletRecharge, claimAdminGift, } from "../controllers/auth.controller.js";
 import { loginLimiter, otpLimiter, registerLimiter } from "../middlewares/rateLimiter.js";
 import { protect } from "../middlewares/protect.js";
+import { issueCsrfToken } from "../middlewares/csrfProtection.js";
 import { validate } from "../middlewares/validate.js";
 import { changePasswordSchema, deleteAccountSchema, forgotPasswordSchema, requestWithdrawalSchema, rechargeSkillCoinSchema, resetPasswordSchema, verifyWalletRechargeSchema, } from "../validators/auth.validator.js";
 const router = express.Router();
+router.get("/csrf", issueCsrfToken);
 router.post("/register", registerLimiter, register);
 router.post("/login", loginLimiter, login);
+router.post("/logout", logout);
 router.get("/google/start", startSocialLogin("google"));
 router.get("/google/callback", handleSocialCallback("google"));
 router.get("/linkedin/start", startSocialLogin("linkedin"));

@@ -21,6 +21,7 @@ import adminRoutes from "./routes/admin.routes.js";
 import { configureCloudinary } from "./config/cloudinary.js";
 import { errorHandler } from "./middlewares/errorHandler.js";
 import { globalLimiter } from "./middlewares/rateLimiter.js";
+import { csrfProtection } from "./middlewares/csrfProtection.js";
 
 /* ================= ENV ================= */
 
@@ -57,6 +58,9 @@ app.use(globalLimiter);
 
 /* 📦 BODY LIMIT (DoS protection) */
 app.use(express.json({ limit: "10kb" }));
+
+/* CSRF guard for cookie-authenticated mutation requests */
+app.use(csrfProtection);
 
 /* ================= ROUTES ================= */
 

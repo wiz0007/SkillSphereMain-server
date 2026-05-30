@@ -16,6 +16,7 @@ import { syncAdminAccess } from "../middlewares/adminOnly.js";
 import { generateOTP } from "../utils/generateOtp.js";
 import { sendOTPEmail, sendPasswordResetEmail } from "../utils/sendEmail.js";
 import { sendWelcomeEmail } from "../utils/emailNotifications.js";
+import { clearAuthCookie, setAuthCookie } from "../utils/authCookie.js";
 import { getWalletTransactionProof } from "../services/auditAnchor.service.js";
 import { buildWalletSummary, creditSkillCoins, getRecentWalletTransactions, lockSkillCoins, spendLockedSkillCoins, unlockSkillCoins, } from "../utils/wallet.js";
 const generateToken = (id) => {
@@ -88,12 +89,9 @@ const verifySocialState = (state, provider) => {
     }
     return decoded;
 };
-const redirectToSocialCallback = ({ req, token, profileCompleted, error, }) => {
+const redirectToSocialCallback = ({ req, profileCompleted, error, }) => {
     const frontendBase = getFrontendBaseUrl(req);
     const hash = new URLSearchParams();
-    if (token) {
-        hash.set("token", token);
-    }
     if (typeof profileCompleted === "boolean") {
         hash.set("profileCompleted", String(profileCompleted));
     }
@@ -481,8 +479,9 @@ export const login = async (req, res) => {
         }
         const profile = await Profile.findOne({ user: user._id });
         const refreshedUser = await User.findById(user._id);
+        const token = generateToken(user._id.toString());
+        setAuthCookie(res, token);
         return res.json({
-            token: generateToken(user._id.toString()),
             user: toSafeUser((refreshedUser || user).toObject(), {
                 isTutor: profile?.isTutor,
                 profilePhoto: profile?.profilePhoto,
@@ -547,9 +546,9 @@ export const handleSocialCallback = (provider) => {
                     ? await exchangeLinkedInCode(req, code)
                     : await exchangeGithubCode(req, code);
             const { token, profile } = await upsertSocialUser(socialProfile);
+            setAuthCookie(res, token);
             return res.redirect(redirectToSocialCallback({
                 req,
-                token,
                 profileCompleted: Boolean(profile),
             }));
         }
@@ -561,6 +560,10 @@ export const handleSocialCallback = (provider) => {
             }));
         }
     };
+};
+export const logout = (_req, res) => {
+    clearAuthCookie(res);
+    return res.json({ message: "Logged out successfully" });
 };
 export const verifyOTP = async (req, res) => {
     try {
@@ -1237,6 +1240,7 @@ export const deleteAccount = async (req, res) => {
             });
         }
         await user.deleteOne();
+        clearAuthCookie(res);
         return res.json({ message: "Account deleted successfully" });
     }
     catch (error) {

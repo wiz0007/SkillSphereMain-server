@@ -2,6 +2,7 @@ import express from "express";
 import {
   register,
   login,
+  logout,
   startSocialLogin,
   handleSocialCallback,
   verifyOTP,
@@ -23,6 +24,7 @@ import {
 } from "../controllers/auth.controller.js";
 import { loginLimiter, otpLimiter, registerLimiter } from "../middlewares/rateLimiter.js";
 import { protect } from "../middlewares/protect.js";
+import { issueCsrfToken } from "../middlewares/csrfProtection.js";
 import { validate } from "../middlewares/validate.js";
 import {
   changePasswordSchema,
@@ -36,8 +38,10 @@ import {
 
 const router = express.Router();
 
+router.get("/csrf", issueCsrfToken);
 router.post("/register", registerLimiter, register);
 router.post("/login", loginLimiter, login);
+router.post("/logout", logout);
 router.get("/google/start", startSocialLogin("google"));
 router.get("/google/callback", handleSocialCallback("google"));
 router.get("/linkedin/start", startSocialLogin("linkedin"));

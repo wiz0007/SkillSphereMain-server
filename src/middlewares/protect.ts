@@ -1,19 +1,12 @@
 import type { RequestHandler } from "express";
 import jwt, { type JwtPayload } from "jsonwebtoken";
+import { getAuthTokenFromRequest } from "../utils/authCookie.js";
 
 /* ================= PROTECT ================= */
 
 export const protect: RequestHandler = (req, res, next) => {
   try {
-    const authHeader = req.headers.authorization;
-
-    if (!authHeader || !authHeader.startsWith("Bearer ")) {
-      return res.status(401).json({
-        message: "No token provided",
-      });
-    }
-
-    const token = authHeader.split(" ")[1];
+    const token = getAuthTokenFromRequest(req);
 
     if (!token) {
       return res.status(401).json({
@@ -25,8 +18,6 @@ export const protect: RequestHandler = (req, res, next) => {
       token,
       process.env.JWT_SECRET as string
     ) as JwtPayload;
-
-    console.log("DECODED TOKEN:", decoded); // debug
 
     const userId =
       decoded.id || decoded._id || decoded.userId;

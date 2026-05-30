@@ -18,6 +18,7 @@ import adminRoutes from "./routes/admin.routes.js";
 import { configureCloudinary } from "./config/cloudinary.js";
 import { errorHandler } from "./middlewares/errorHandler.js";
 import { globalLimiter } from "./middlewares/rateLimiter.js";
+import { csrfProtection } from "./middlewares/csrfProtection.js";
 /* ================= ENV ================= */
 dotenv.config({
     path: path.resolve(process.cwd(), ".env"),
@@ -42,6 +43,8 @@ app.use(cors({
 app.use(globalLimiter);
 /* 📦 BODY LIMIT (DoS protection) */
 app.use(express.json({ limit: "10kb" }));
+/* CSRF guard for cookie-authenticated mutation requests */
+app.use(csrfProtection);
 /* ================= ROUTES ================= */
 app.use("/api/auth", authRoutes);
 app.use("/api/profile", profileRoutes);
