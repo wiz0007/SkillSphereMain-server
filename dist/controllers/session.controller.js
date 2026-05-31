@@ -9,6 +9,7 @@ import { logActivity } from "../utils/activityLogger.js";
 import { emitNotification, emitWalletUpdate } from "../config/socket.js";
 import { buildWalletSummary, lockSkillCoins, unlockSkillCoins, } from "../utils/wallet.js";
 import { ensureTuitionSessionsGenerated } from "../utils/tuition.js";
+import { ensureSessionConfirmationAllowed, ensureSessionTransitionAllowed, } from "../utils/flowGuards.js";
 const isValidObjectId = (id) => mongoose.Types.ObjectId.isValid(id);
 const getId = (param) => {
     if (typeof param === "string")
@@ -273,16 +274,7 @@ export const updateSessionStatus = async (req, res) => {
             if (currentSession.tutor.toString() !== userId.toString()) {
                 throw new Error("Not authorized");
             }
-            if (status === "accepted" && currentSession.status !== "pending") {
-                throw new Error("Only pending sessions can be accepted");
-            }
-            if (status === "completed" && currentSession.status !== "accepted") {
-                throw new Error("Only accepted sessions can be marked complete");
-            }
-            if (status === "cancelled" &&
-                !["pending", "accepted"].includes(currentSession.status)) {
-                throw new Error("This session can no longer be cancelled");
-            }
+            ensureSessionTransitionAllowed(currentSession.status, status);
             currentSession.status = status;
             if (status === "accepted") {
                 currentSession.acceptedAt = new Date();
@@ -379,14 +371,7 @@ export const confirmSessionCompletion = async (req, res) => {
             if (currentSession.student.toString() !== userId.toString()) {
                 throw new Error("Not authorized");
             }
-            if (currentSession.status !== "completed") {
-                throw new Error("The tutor needs to mark the session completed first");
-            }
-            if (currentSession.studentConfirmedCompletionAt ||
-                currentSession.coinStatus === "settled" ||
-                currentSession.coinStatus === "awaiting_admin_release") {
-                throw new Error("This session has already been confirmed");
-            }
+            ensureSessionConfirmationAllowed(currentSession);
             if (currentSession.sessionKind !== "tuition") {
                 currentSession.coinStatus = "awaiting_admin_release";
             }

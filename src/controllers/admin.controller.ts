@@ -25,6 +25,10 @@ import {
   spendLockedSkillCoins,
   unlockSkillCoins,
 } from "../utils/wallet.js";
+import {
+  calculateTutorPayout,
+  ensureWithdrawalTransitionAllowed,
+} from "../utils/flowGuards.js";
 
 const isValidObjectId = (id: string) => mongoose.Types.ObjectId.isValid(id);
 
@@ -774,9 +778,8 @@ export const settleAdminSession: RequestHandler = async (req, res) => {
       }
 
       if (action === "release") {
-        const grossAmount = session.skillCoinAmount;
-        const tutorAmount = Math.floor(grossAmount * 0.9);
-        const commissionAmount = grossAmount - tutorAmount;
+        const { grossAmount, tutorAmount, commissionAmount } =
+          calculateTutorPayout(session.skillCoinAmount);
 
         const result = await settleLockedSkillCoins({
           student,
@@ -946,13 +949,7 @@ export const updateAdminWithdrawalRequest: RequestHandler = async (req, res) => 
         throw new Error("Withdrawal request not found");
       }
 
-      if (request.status === "paid" || request.status === "rejected") {
-        throw new Error("This withdrawal request is already closed");
-      }
-
-      if (request.status === status) {
-        throw new Error(`This withdrawal request is already marked ${status}`);
-      }
+      ensureWithdrawalTransitionAllowed(request.status, status);
 
       const user = await User.findById(request.user).session(dbSession);
 

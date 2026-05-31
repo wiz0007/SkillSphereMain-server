@@ -14,6 +14,10 @@ import {
   unlockSkillCoins,
 } from "../utils/wallet.js";
 import { ensureTuitionSessionsGenerated } from "../utils/tuition.js";
+import {
+  ensureSessionConfirmationAllowed,
+  ensureSessionTransitionAllowed,
+} from "../utils/flowGuards.js";
 
 const isValidObjectId = (id: string) => mongoose.Types.ObjectId.isValid(id);
 
@@ -375,20 +379,7 @@ export const updateSessionStatus: RequestHandler = async (req, res) => {
         throw new Error("Not authorized");
       }
 
-      if (status === "accepted" && currentSession.status !== "pending") {
-        throw new Error("Only pending sessions can be accepted");
-      }
-
-      if (status === "completed" && currentSession.status !== "accepted") {
-        throw new Error("Only accepted sessions can be marked complete");
-      }
-
-      if (
-        status === "cancelled" &&
-        !["pending", "accepted"].includes(currentSession.status)
-      ) {
-        throw new Error("This session can no longer be cancelled");
-      }
+      ensureSessionTransitionAllowed(currentSession.status, status);
 
       currentSession.status = status;
 
@@ -522,17 +513,7 @@ export const confirmSessionCompletion: RequestHandler = async (req, res) => {
         throw new Error("Not authorized");
       }
 
-      if (currentSession.status !== "completed") {
-        throw new Error("The tutor needs to mark the session completed first");
-      }
-
-      if (
-        currentSession.studentConfirmedCompletionAt ||
-        currentSession.coinStatus === "settled" ||
-        currentSession.coinStatus === "awaiting_admin_release"
-      ) {
-        throw new Error("This session has already been confirmed");
-      }
+      ensureSessionConfirmationAllowed(currentSession);
 
       if (currentSession.sessionKind !== "tuition") {
         currentSession.coinStatus = "awaiting_admin_release";

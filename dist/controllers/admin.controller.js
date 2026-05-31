@@ -18,6 +18,7 @@ import { emitNotification, emitSupportMessage, emitWalletUpdate } from "../confi
 import { logActivity } from "../utils/activityLogger.js";
 import { uploadMulterFile } from "../utils/cloudinaryUpload.js";
 import { buildWalletSummary, debitSkillCoins, settleLockedSkillCoins, spendLockedSkillCoins, unlockSkillCoins, } from "../utils/wallet.js";
+import { calculateTutorPayout, ensureWithdrawalTransitionAllowed, } from "../utils/flowGuards.js";
 const isValidObjectId = (id) => mongoose.Types.ObjectId.isValid(id);
 const getId = (param) => {
     if (typeof param === "string")
@@ -636,9 +637,7 @@ export const settleAdminSession = async (req, res) => {
                 throw new Error("Session participants could not be found");
             }
             if (action === "release") {
-                const grossAmount = session.skillCoinAmount;
-                const tutorAmount = Math.floor(grossAmount * 0.9);
-                const commissionAmount = grossAmount - tutorAmount;
+                const { grossAmount, tutorAmount, commissionAmount } = calculateTutorPayout(session.skillCoinAmount);
                 const result = await settleLockedSkillCoins({
                     student,
                     tutor,
@@ -773,12 +772,7 @@ export const updateAdminWithdrawalRequest = async (req, res) => {
             if (!request) {
                 throw new Error("Withdrawal request not found");
             }
-            if (request.status === "paid" || request.status === "rejected") {
-                throw new Error("This withdrawal request is already closed");
-            }
-            if (request.status === status) {
-                throw new Error(`This withdrawal request is already marked ${status}`);
-            }
+            ensureWithdrawalTransitionAllowed(request.status, status);
             const user = await User.findById(request.user).session(dbSession);
             if (!user) {
                 throw new Error("Withdrawal user not found");

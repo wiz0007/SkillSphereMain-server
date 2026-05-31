@@ -10,6 +10,7 @@ import User from "../models/User.js";
 import { logActivity } from "../utils/activityLogger.js";
 import { cancelFutureTuitionSessions, ensureTuitionSessionsGenerated, parseDurationToMinutes, } from "../utils/tuition.js";
 import { buildWalletSummary, lockSkillCoins, settleLockedSkillCoins, unlockSkillCoins, } from "../utils/wallet.js";
+import { ensurePendingLockedResource } from "../utils/flowGuards.js";
 const isValidObjectId = (id) => mongoose.Types.ObjectId.isValid(id);
 const getId = (param) => {
     if (!param)
@@ -829,10 +830,7 @@ export const approveRecordedCourseAccess = async (req, res) => {
             if (currentAccess.tutor.toString() !== userId.toString()) {
                 throw new Error("Not authorized");
             }
-            if (currentAccess.status !== "pending" ||
-                currentAccess.coinStatus !== "locked") {
-                throw new Error("This access request can no longer be approved");
-            }
+            ensurePendingLockedResource(currentAccess, "This access request can no longer be approved");
             const [freshCourse, freshStudent, freshTutor] = await Promise.all([
                 Course.findById(currentAccess.course).session(dbSession),
                 User.findById(currentAccess.student).session(dbSession),
@@ -925,10 +923,7 @@ export const rejectRecordedCourseAccess = async (req, res) => {
             if (currentAccess.tutor.toString() !== userId.toString()) {
                 throw new Error("Not authorized");
             }
-            if (currentAccess.status !== "pending" ||
-                currentAccess.coinStatus !== "locked") {
-                throw new Error("This access request can no longer be rejected");
-            }
+            ensurePendingLockedResource(currentAccess, "This access request can no longer be rejected");
             const [freshCourse, freshStudent] = await Promise.all([
                 Course.findById(currentAccess.course).session(dbSession),
                 User.findById(currentAccess.student).session(dbSession),
@@ -1146,10 +1141,7 @@ export const approveTuitionEnrollment = async (req, res) => {
             if (currentEnrollment.tutor.toString() !== userId.toString()) {
                 throw new Error("Not authorized");
             }
-            if (currentEnrollment.status !== "pending" ||
-                currentEnrollment.coinStatus !== "locked") {
-                throw new Error("This tuition request can no longer be approved");
-            }
+            ensurePendingLockedResource(currentEnrollment, "This tuition request can no longer be approved");
             const [freshCourse, freshStudent, freshTutor] = await Promise.all([
                 Course.findById(currentEnrollment.course).session(dbSession),
                 User.findById(currentEnrollment.student).session(dbSession),
@@ -1247,10 +1239,7 @@ export const rejectTuitionEnrollment = async (req, res) => {
             if (currentEnrollment.tutor.toString() !== userId.toString()) {
                 throw new Error("Not authorized");
             }
-            if (currentEnrollment.status !== "pending" ||
-                currentEnrollment.coinStatus !== "locked") {
-                throw new Error("This tuition request can no longer be rejected");
-            }
+            ensurePendingLockedResource(currentEnrollment, "This tuition request can no longer be rejected");
             const [freshCourse, freshStudent] = await Promise.all([
                 Course.findById(currentEnrollment.course).session(dbSession),
                 User.findById(currentEnrollment.student).session(dbSession),
