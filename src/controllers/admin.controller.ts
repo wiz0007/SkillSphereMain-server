@@ -18,6 +18,7 @@ import WalletTransaction from "../models/WalletTransaction.js";
 import { emitNotification, emitSupportMessage, emitWalletUpdate } from "../config/socket.js";
 import { logActivity } from "../utils/activityLogger.js";
 import { uploadMulterFile } from "../utils/cloudinaryUpload.js";
+import { getWalletTransactionProof } from "../services/auditAnchor.service.js";
 import {
   buildWalletSummary,
   debitSkillCoins,
@@ -1383,5 +1384,37 @@ export const getAdminWalletTransactions: RequestHandler = async (_req, res) => {
   } catch (error: any) {
     console.error("ADMIN WALLET ERROR:", error);
     return res.status(500).json({ message: "Failed to fetch wallet activity" });
+  }
+};
+
+export const getAdminWalletProof: RequestHandler = async (req, res) => {
+  try {
+    const id = getId(req.params.id);
+
+    if (!isValidObjectId(id)) {
+      return res.status(400).json({ message: "Invalid wallet transaction ID" });
+    }
+
+    const transaction = await WalletTransaction.findById(id)
+      .select("user")
+      .lean();
+
+    if (!transaction) {
+      return res.status(404).json({ message: "Wallet transaction not found" });
+    }
+
+    const proof = await getWalletTransactionProof(
+      id,
+      transaction.user.toString()
+    );
+
+    if (!proof) {
+      return res.status(404).json({ message: "Wallet proof not found" });
+    }
+
+    return res.json(proof);
+  } catch (error: any) {
+    console.error("ADMIN WALLET PROOF ERROR:", error);
+    return res.status(500).json({ message: "Failed to fetch wallet proof" });
   }
 };

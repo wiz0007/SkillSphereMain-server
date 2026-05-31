@@ -12,6 +12,7 @@ import {
   getAdminSupportMessages,
   getAdminUsers,
   getAdminWithdrawalRequests,
+  getAdminWalletProof,
   getAdminWalletTransactions,
   sendAdminSupportMessage,
   settleAdminSession,
@@ -55,6 +56,7 @@ router.patch("/support/:id/status", updateAdminSupportStatus);
 router.get("/reviews", getAdminReviews);
 router.delete("/reviews/:id", deleteAdminReview);
 router.get("/wallet", getAdminWalletTransactions);
+router.get("/wallet/:id/proof", getAdminWalletProof);
 router.get("/withdrawals", getAdminWithdrawalRequests);
 router.patch("/withdrawals/:id", updateAdminWithdrawalRequest);
 

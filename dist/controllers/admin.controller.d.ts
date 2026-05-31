@@ -17,4 +17,5 @@ export declare const sendAdminSupportMessage: RequestHandler;
 export declare const getAdminReviews: RequestHandler;
 export declare const deleteAdminReview: RequestHandler;
 export declare const getAdminWalletTransactions: RequestHandler;
+export declare const getAdminWalletProof: RequestHandler;
 //# sourceMappingURL=admin.controller.d.ts.map

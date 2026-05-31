@@ -1,5 +1,5 @@
 import express from "express";
-import { adjustAdminUserSkillCoins, deleteAdminUser, deleteAdminCourse, deleteAdminReview, getAdminCourses, getAdminOverview, getAdminReviews, getAdminSessions, getAdminSupportConversations, getAdminSupportMessages, getAdminUsers, getAdminWithdrawalRequests, getAdminWalletTransactions, sendAdminSupportMessage, settleAdminSession, updateAdminCoursePublishStatus, updateAdminSupportStatus, updateAdminWithdrawalRequest, } from "../controllers/admin.controller.js";
+import { adjustAdminUserSkillCoins, deleteAdminUser, deleteAdminCourse, deleteAdminReview, getAdminCourses, getAdminOverview, getAdminReviews, getAdminSessions, getAdminSupportConversations, getAdminSupportMessages, getAdminUsers, getAdminWithdrawalRequests, getAdminWalletProof, getAdminWalletTransactions, sendAdminSupportMessage, settleAdminSession, updateAdminCoursePublishStatus, updateAdminSupportStatus, updateAdminWithdrawalRequest, } from "../controllers/admin.controller.js";
 import { adminOnly } from "../middlewares/adminOnly.js";
 import { protect } from "../middlewares/protect.js";
 import { handleUpload, supportUpload } from "../middlewares/upload.js";
@@ -25,6 +25,7 @@ router.patch("/support/:id/status", updateAdminSupportStatus);
 router.get("/reviews", getAdminReviews);
 router.delete("/reviews/:id", deleteAdminReview);
 router.get("/wallet", getAdminWalletTransactions);
+router.get("/wallet/:id/proof", getAdminWalletProof);
 router.get("/withdrawals", getAdminWithdrawalRequests);
 router.patch("/withdrawals/:id", updateAdminWithdrawalRequest);
 export default router;
