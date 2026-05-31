@@ -52,12 +52,15 @@ export const recordWalletTransaction = async ({ userId, type, amount, balanceAft
         },
     ], dbSession ? { session: dbSession } : undefined);
 };
-export const creditSkillCoins = async (user, amount, description, metadata, dbSession) => {
+export const creditSkillCoins = async (user, amount, description, metadata, dbSession, transactionType = "recharge") => {
+    if (amount <= 0) {
+        throw new Error("Amount must be greater than 0");
+    }
     user.skillCoinBalance += amount;
     await user.save(dbSession ? { session: dbSession } : undefined);
     await recordWalletTransaction({
         userId: user._id,
-        type: "recharge",
+        type: transactionType,
         amount,
         balanceAfter: user.skillCoinBalance,
         lockedAfter: user.lockedSkillCoins,
@@ -93,6 +96,9 @@ export const debitSkillCoins = async (user, amount, description, metadata, dbSes
     return buildWalletSummary(user);
 };
 export const lockSkillCoins = async (user, amount, description, metadata, dbSession, transactionType = "session_lock") => {
+    if (amount <= 0) {
+        return buildWalletSummary(user);
+    }
     if (getAvailableSkillCoins(user) < amount) {
         throw new Error("Insufficient SkillCoin balance");
     }
@@ -113,6 +119,12 @@ export const lockSkillCoins = async (user, amount, description, metadata, dbSess
     return buildWalletSummary(user);
 };
 export const unlockSkillCoins = async (user, amount, description, metadata, dbSession, transactionType = "session_unlock") => {
+    if (amount <= 0) {
+        return buildWalletSummary(user);
+    }
+    if (user.lockedSkillCoins < amount) {
+        throw new Error("Locked SkillCoin balance is insufficient");
+    }
     user.lockedSkillCoins = Math.max(0, user.lockedSkillCoins - amount);
     await user.save(dbSession ? { session: dbSession } : undefined);
     await recordWalletTransaction({
@@ -131,7 +143,7 @@ export const unlockSkillCoins = async (user, amount, description, metadata, dbSe
 };
 export const spendLockedSkillCoins = async (user, amount, description, metadata, dbSession, transactionType = "withdrawal_spend") => {
     if (amount <= 0) {
-        throw new Error("Amount must be greater than 0");
+        return buildWalletSummary(user);
     }
     if (user.lockedSkillCoins < amount || user.skillCoinBalance < amount) {
         throw new Error("Locked SkillCoin balance is insufficient");

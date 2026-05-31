@@ -8,7 +8,18 @@ import {
 
 type WalletTransactionInput = {
   userId: mongoose.Types.ObjectId | string;
-  type:
+  type: WalletTransactionType;
+  amount: number;
+  balanceAfter: number;
+  lockedAfter: number;
+  description: string;
+  sessionId?: mongoose.Types.ObjectId | string;
+  courseId?: mongoose.Types.ObjectId | string;
+  metadata?: Record<string, unknown>;
+  dbSession?: mongoose.ClientSession;
+};
+
+type WalletTransactionType =
     | "recharge"
     | "admin_credit"
     | "admin_debit"
@@ -27,15 +38,6 @@ type WalletTransactionInput = {
     | "recorded_course_unlock"
     | "recorded_course_spend"
     | "recorded_course_earn";
-  amount: number;
-  balanceAfter: number;
-  lockedAfter: number;
-  description: string;
-  sessionId?: mongoose.Types.ObjectId | string;
-  courseId?: mongoose.Types.ObjectId | string;
-  metadata?: Record<string, unknown>;
-  dbSession?: mongoose.ClientSession;
-};
 
 export const getAvailableSkillCoins = (
   user: Pick<IUser, "skillCoinBalance" | "lockedSkillCoins">
@@ -119,14 +121,24 @@ export const creditSkillCoins = async (
     courseId?: mongoose.Types.ObjectId | string;
     extra?: Record<string, unknown>;
   },
-  dbSession?: mongoose.ClientSession
+  dbSession?: mongoose.ClientSession,
+  transactionType:
+    | "recharge"
+    | "admin_credit"
+    | "session_earn"
+    | "tuition_earn"
+    | "recorded_course_earn" = "recharge"
 ) => {
+  if (amount <= 0) {
+    throw new Error("Amount must be greater than 0");
+  }
+
   user.skillCoinBalance += amount;
   await user.save(dbSession ? { session: dbSession } : undefined);
 
   await recordWalletTransaction({
     userId: user._id,
-    type: "recharge",
+    type: transactionType,
     amount,
     balanceAfter: user.skillCoinBalance,
     lockedAfter: user.lockedSkillCoins,
@@ -194,6 +206,10 @@ export const lockSkillCoins = async (
     | "tuition_lock"
     | "recorded_course_lock" = "session_lock"
 ) => {
+  if (amount <= 0) {
+    return buildWalletSummary(user);
+  }
+
   if (getAvailableSkillCoins(user) < amount) {
     throw new Error("Insufficient SkillCoin balance");
   }
@@ -233,6 +249,14 @@ export const unlockSkillCoins = async (
     | "tuition_unlock"
     | "recorded_course_unlock" = "session_unlock"
 ) => {
+  if (amount <= 0) {
+    return buildWalletSummary(user);
+  }
+
+  if (user.lockedSkillCoins < amount) {
+    throw new Error("Locked SkillCoin balance is insufficient");
+  }
+
   user.lockedSkillCoins = Math.max(0, user.lockedSkillCoins - amount);
   await user.save(dbSession ? { session: dbSession } : undefined);
 
@@ -269,7 +293,7 @@ export const spendLockedSkillCoins = async (
     | "recorded_course_spend" = "withdrawal_spend"
 ) => {
   if (amount <= 0) {
-    throw new Error("Amount must be greater than 0");
+    return buildWalletSummary(user);
   }
 
   if (user.lockedSkillCoins < amount || user.skillCoinBalance < amount) {

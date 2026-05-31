@@ -25,17 +25,43 @@ const releaseExpiredPendingSessionLocks = async () => {
         date: { $lt: new Date() },
     });
     for (const session of expiredSessions) {
-        const student = await User.findById(session.student);
-        if (!student) {
-            continue;
+        const dbSession = await mongoose.startSession();
+        try {
+            let studentId = "";
+            let wallet = null;
+            await dbSession.withTransaction(async () => {
+                const lockedSession = await Session.findOne({
+                    _id: session._id,
+                    status: "pending",
+                    coinStatus: "locked",
+                }).session(dbSession);
+                if (!lockedSession) {
+                    return;
+                }
+                const student = await User.findById(lockedSession.student).session(dbSession);
+                if (!student) {
+                    lockedSession.coinStatus = "released";
+                    await lockedSession.save({ session: dbSession });
+                    return;
+                }
+                wallet = await unlockSkillCoins(student, lockedSession.skillCoinAmount, `SkillCoin unlocked for expired request: ${lockedSession.title}`, {
+                    sessionId: lockedSession._id,
+                    ...(lockedSession.course ? { courseId: lockedSession.course } : {}),
+                }, dbSession);
+                lockedSession.coinStatus = "released";
+                await lockedSession.save({ session: dbSession });
+                studentId = student._id.toString();
+            });
+            if (studentId && wallet) {
+                emitWalletUpdate(studentId, wallet);
+            }
         }
-        await unlockSkillCoins(student, session.skillCoinAmount, `SkillCoin unlocked for expired request: ${session.title}`, {
-            sessionId: session._id,
-            ...(session.course ? { courseId: session.course } : {}),
-        });
-        session.coinStatus = "released";
-        await session.save();
-        emitWalletUpdate(student._id.toString(), buildWalletSummary(student));
+        catch (error) {
+            console.error("EXPIRED SESSION RELEASE ERROR:", error);
+        }
+        finally {
+            await dbSession.endSession();
+        }
     }
 };
 export const createSession = async (req, res) => {
@@ -228,7 +254,7 @@ export const updateSessionStatus = async (req, res) => {
             return res.status(400).json({ message: "Invalid status" });
         }
         dbSession = await mongoose.startSession();
-        const session = await Session.findById(id).session(dbSession);
+        let session = await Session.findById(id).session(dbSession);
         if (!session) {
             return res.status(404).json({ message: "Not found" });
         }
@@ -240,23 +266,41 @@ export const updateSessionStatus = async (req, res) => {
             return res.status(404).json({ message: "Student not found" });
         }
         await dbSession.withTransaction(async () => {
-            session.status = status;
-            if (status === "accepted") {
-                session.acceptedAt = new Date();
+            const currentSession = await Session.findById(id).session(dbSession);
+            if (!currentSession) {
+                throw new Error("Session not found");
             }
-            if (status === "completed") {
-                session.tutorMarkedCompletedAt = new Date();
+            if (currentSession.tutor.toString() !== userId.toString()) {
+                throw new Error("Not authorized");
+            }
+            if (status === "accepted" && currentSession.status !== "pending") {
+                throw new Error("Only pending sessions can be accepted");
+            }
+            if (status === "completed" && currentSession.status !== "accepted") {
+                throw new Error("Only accepted sessions can be marked complete");
             }
             if (status === "cancelled" &&
-                session.coinStatus === "locked" &&
-                session.skillCoinAmount > 0) {
-                await unlockSkillCoins(student, session.skillCoinAmount, `SkillCoin unlocked after session request was declined: ${session.title}`, {
-                    sessionId: session._id,
-                    ...(session.course ? { courseId: session.course } : {}),
-                }, dbSession);
-                session.coinStatus = "released";
+                !["pending", "accepted"].includes(currentSession.status)) {
+                throw new Error("This session can no longer be cancelled");
             }
-            await session.save({ session: dbSession });
+            currentSession.status = status;
+            if (status === "accepted") {
+                currentSession.acceptedAt = new Date();
+            }
+            if (status === "completed") {
+                currentSession.tutorMarkedCompletedAt = new Date();
+            }
+            if (status === "cancelled" &&
+                currentSession.coinStatus === "locked" &&
+                currentSession.skillCoinAmount > 0) {
+                await unlockSkillCoins(student, currentSession.skillCoinAmount, `SkillCoin unlocked after session request was declined: ${currentSession.title}`, {
+                    sessionId: currentSession._id,
+                    ...(currentSession.course ? { courseId: currentSession.course } : {}),
+                }, dbSession);
+                currentSession.coinStatus = "released";
+            }
+            await currentSession.save({ session: dbSession });
+            session = currentSession;
         });
         if (status === "cancelled" && session.coinStatus === "released") {
             emitWalletUpdate(student._id.toString(), buildWalletSummary(student));
@@ -278,7 +322,13 @@ export const updateSessionStatus = async (req, res) => {
     }
     catch (err) {
         console.error("UPDATE SESSION ERROR:", err);
-        return res.status(500).json({ message: "Error updating session" });
+        return res.status([
+            "Only pending sessions can be accepted",
+            "Only accepted sessions can be marked complete",
+            "This session can no longer be cancelled",
+        ].includes(err?.message)
+            ? 400
+            : 500).json({ message: err?.message || "Error updating session" });
     }
     finally {
         await dbSession?.endSession();
@@ -296,7 +346,7 @@ export const confirmSessionCompletion = async (req, res) => {
             return res.status(400).json({ message: "Invalid session ID" });
         }
         dbSession = await mongoose.startSession();
-        const session = await Session.findById(id).session(dbSession);
+        let session = await Session.findById(id).session(dbSession);
         if (!session) {
             return res.status(404).json({ message: "Session not found" });
         }
@@ -322,14 +372,30 @@ export const confirmSessionCompletion = async (req, res) => {
             return res.status(404).json({ message: "Wallet users not found" });
         }
         await dbSession.withTransaction(async () => {
-            if (session.sessionKind !== "tuition") {
-                session.coinStatus = "awaiting_admin_release";
+            const currentSession = await Session.findById(id).session(dbSession);
+            if (!currentSession) {
+                throw new Error("Session not found");
+            }
+            if (currentSession.student.toString() !== userId.toString()) {
+                throw new Error("Not authorized");
+            }
+            if (currentSession.status !== "completed") {
+                throw new Error("The tutor needs to mark the session completed first");
+            }
+            if (currentSession.studentConfirmedCompletionAt ||
+                currentSession.coinStatus === "settled" ||
+                currentSession.coinStatus === "awaiting_admin_release") {
+                throw new Error("This session has already been confirmed");
+            }
+            if (currentSession.sessionKind !== "tuition") {
+                currentSession.coinStatus = "awaiting_admin_release";
             }
             else {
-                session.coinStatus = "settled";
+                currentSession.coinStatus = "settled";
             }
-            session.studentConfirmedCompletionAt = new Date();
-            await session.save({ session: dbSession });
+            currentSession.studentConfirmedCompletionAt = new Date();
+            await currentSession.save({ session: dbSession });
+            session = currentSession;
         });
         emitWalletUpdate(student._id.toString(), buildWalletSummary(student));
         emitWalletUpdate(tutor._id.toString(), buildWalletSummary(tutor));
@@ -347,8 +413,13 @@ export const confirmSessionCompletion = async (req, res) => {
     }
     catch (err) {
         console.error("CONFIRM SESSION ERROR:", err);
-        return res.status(500).json({
-            message: "Error confirming session completion",
+        return res.status([
+            "The tutor needs to mark the session completed first",
+            "This session has already been confirmed",
+        ].includes(err?.message)
+            ? 400
+            : 500).json({
+            message: err?.message || "Error confirming session completion",
         });
     }
     finally {

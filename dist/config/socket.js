@@ -1,7 +1,42 @@
 import { Server } from "socket.io";
-import http from "http";
+import jwt, {} from "jsonwebtoken";
+import { AUTH_COOKIE_NAME, parseCookieHeader } from "../utils/authCookie.js";
 let io;
-const users = new Map();
+const userSockets = new Map();
+const socketUsers = new Map();
+const getUserIdFromCookie = (cookieHeader) => {
+    const cookies = parseCookieHeader(cookieHeader || "");
+    const token = cookies[AUTH_COOKIE_NAME];
+    if (!token) {
+        return null;
+    }
+    try {
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        const userId = decoded.id || decoded._id || decoded.userId;
+        return userId ? String(userId) : null;
+    }
+    catch {
+        return null;
+    }
+};
+const registerSocket = (userId, socketId) => {
+    const sockets = userSockets.get(userId) || new Set();
+    sockets.add(socketId);
+    userSockets.set(userId, sockets);
+    socketUsers.set(socketId, userId);
+};
+const unregisterSocket = (socketId) => {
+    const userId = socketUsers.get(socketId);
+    if (!userId) {
+        return;
+    }
+    const sockets = userSockets.get(userId);
+    sockets?.delete(socketId);
+    if (!sockets?.size) {
+        userSockets.delete(userId);
+    }
+    socketUsers.delete(socketId);
+};
 export const initSocket = (server) => {
     io = new Server(server, {
         cors: {
@@ -14,57 +49,43 @@ export const initSocket = (server) => {
         },
     });
     io.on("connection", (socket) => {
-        console.log("🔌 Socket connected:", socket.id);
-        socket.on("register", (userId) => {
-            if (!userId)
-                return;
-            const id = userId.toString();
-            users.set(id, socket.id);
-            console.log("👤 Registered:", id);
+        const userId = getUserIdFromCookie(socket.handshake.headers.cookie);
+        if (userId) {
+            registerSocket(userId, socket.id);
+        }
+        socket.on("register", () => {
+            const verifiedUserId = userId || getUserIdFromCookie(socket.handshake.headers.cookie);
+            if (verifiedUserId) {
+                registerSocket(verifiedUserId, socket.id);
+            }
         });
         socket.on("disconnect", () => {
-            for (let [userId, id] of users.entries()) {
-                if (id === socket.id) {
-                    users.delete(userId);
-                }
-            }
+            unregisterSocket(socket.id);
         });
     });
 };
-export const emitNotification = (userId, payload) => {
-    if (!io)
+const emitToUser = (userId, event, payload) => {
+    if (!io) {
         return;
-    const socketId = users.get(userId.toString());
-    if (socketId) {
-        console.log("📡 Emitting to:", userId);
-        io.to(socketId).emit("notification", payload);
     }
-    else {
-        console.log("❌ User not connected:", userId);
+    const sockets = userSockets.get(userId.toString());
+    if (!sockets?.size) {
+        return;
     }
+    for (const socketId of sockets) {
+        io.to(socketId).emit(event, payload);
+    }
+};
+export const emitNotification = (userId, payload) => {
+    emitToUser(userId, "notification", payload);
 };
 export const emitChatMessage = (userId, payload) => {
-    if (!io)
-        return;
-    const socketId = users.get(userId.toString());
-    if (socketId) {
-        io.to(socketId).emit("chat:message", payload);
-    }
+    emitToUser(userId, "chat:message", payload);
 };
 export const emitSupportMessage = (userId, payload) => {
-    if (!io)
-        return;
-    const socketId = users.get(userId.toString());
-    if (socketId) {
-        io.to(socketId).emit("support:message", payload);
-    }
+    emitToUser(userId, "support:message", payload);
 };
 export const emitWalletUpdate = (userId, payload) => {
-    if (!io)
-        return;
-    const socketId = users.get(userId.toString());
-    if (socketId) {
-        io.to(socketId).emit("wallet:update", payload);
-    }
+    emitToUser(userId, "wallet:update", payload);
 };
 //# sourceMappingURL=socket.js.map

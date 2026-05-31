@@ -627,7 +627,7 @@ export const deleteCourse = async (req, res) => {
         if (!isValidObjectId(id)) {
             return res.status(400).json({ message: "Invalid ID" });
         }
-        const course = await Course.findOneAndDelete({
+        const course = await Course.findOne({
             _id: id,
             tutor: userId,
         });
@@ -636,6 +636,35 @@ export const deleteCourse = async (req, res) => {
                 message: "Course not found or not authorized",
             });
         }
+        const [activeSessions, activeRecordedAccess, activeTuitionEnrollments] = await Promise.all([
+            Session.countDocuments({
+                course: course._id,
+                $or: [
+                    { coinStatus: "locked" },
+                    { status: { $in: ["pending", "accepted", "completed"] } },
+                ],
+            }),
+            RecordedCourseAccess.countDocuments({
+                course: course._id,
+                $or: [
+                    { coinStatus: "locked" },
+                    { status: { $in: ["pending", "approved"] } },
+                ],
+            }),
+            TuitionEnrollment.countDocuments({
+                course: course._id,
+                $or: [
+                    { coinStatus: "locked" },
+                    { status: { $in: ["pending", "approved", "paused"] } },
+                ],
+            }),
+        ]);
+        if (activeSessions || activeRecordedAccess || activeTuitionEnrollments) {
+            return res.status(400).json({
+                message: "This course has active bookings, unlocks, or tuition enrollments. Resolve them before deleting the course.",
+            });
+        }
+        await course.deleteOne();
         await Promise.all([
             CourseReview.deleteMany({ course: course._id }),
             RecordedCourseAccess.deleteMany({ course: course._id }),
@@ -777,7 +806,7 @@ export const approveRecordedCourseAccess = async (req, res) => {
             return res.status(400).json({ message: "Invalid access request ID" });
         }
         dbSession = await mongoose.startSession();
-        const access = await RecordedCourseAccess.findById(accessId).session(dbSession);
+        let access = await RecordedCourseAccess.findById(accessId).session(dbSession);
         if (!access) {
             return res.status(404).json({ message: "Access request not found" });
         }
@@ -789,32 +818,48 @@ export const approveRecordedCourseAccess = async (req, res) => {
                 message: "This access request can no longer be approved",
             });
         }
-        const [course, student, tutor] = await Promise.all([
-            Course.findById(access.course).session(dbSession),
-            User.findById(access.student).session(dbSession),
-            User.findById(access.tutor).session(dbSession),
-        ]);
-        if (!course || !student || !tutor) {
-            return res.status(404).json({
-                message: "Recorded course approval data is incomplete",
-            });
-        }
+        let course = null;
+        let student = null;
+        let tutor = null;
         await dbSession.withTransaction(async () => {
+            const currentAccess = await RecordedCourseAccess.findById(accessId).session(dbSession);
+            if (!currentAccess) {
+                throw new Error("Access request not found");
+            }
+            if (currentAccess.tutor.toString() !== userId.toString()) {
+                throw new Error("Not authorized");
+            }
+            if (currentAccess.status !== "pending" ||
+                currentAccess.coinStatus !== "locked") {
+                throw new Error("This access request can no longer be approved");
+            }
+            const [freshCourse, freshStudent, freshTutor] = await Promise.all([
+                Course.findById(currentAccess.course).session(dbSession),
+                User.findById(currentAccess.student).session(dbSession),
+                User.findById(currentAccess.tutor).session(dbSession),
+            ]);
+            if (!freshCourse || !freshStudent || !freshTutor) {
+                throw new Error("Recorded course approval data is incomplete");
+            }
             await settleLockedSkillCoins({
-                student,
-                tutor,
-                amount: access.skillCoinAmount,
-                courseId: access.course,
-                description: `SkillCoin settled for recorded course unlock: ${course.title}`,
+                student: freshStudent,
+                tutor: freshTutor,
+                amount: currentAccess.skillCoinAmount,
+                courseId: currentAccess.course,
+                description: `SkillCoin settled for recorded course unlock: ${freshCourse.title}`,
                 dbSession: dbSession,
                 studentTransactionType: "recorded_course_spend",
                 tutorTransactionType: "recorded_course_earn",
             });
-            access.status = "approved";
-            access.coinStatus = "settled";
-            access.approvedAt = new Date();
-            access.unlockedAt = new Date();
-            await access.save({ session: dbSession });
+            currentAccess.status = "approved";
+            currentAccess.coinStatus = "settled";
+            currentAccess.approvedAt = new Date();
+            currentAccess.unlockedAt = new Date();
+            await currentAccess.save({ session: dbSession });
+            access = currentAccess;
+            course = freshCourse;
+            student = freshStudent;
+            tutor = freshTutor;
         });
         emitWalletUpdate(student._id.toString(), buildWalletSummary(student));
         emitWalletUpdate(tutor._id.toString(), buildWalletSummary(tutor));
@@ -858,7 +903,7 @@ export const rejectRecordedCourseAccess = async (req, res) => {
             return res.status(400).json({ message: "Invalid access request ID" });
         }
         dbSession = await mongoose.startSession();
-        const access = await RecordedCourseAccess.findById(accessId).session(dbSession);
+        let access = await RecordedCourseAccess.findById(accessId).session(dbSession);
         if (!access) {
             return res.status(404).json({ message: "Access request not found" });
         }
@@ -870,28 +915,42 @@ export const rejectRecordedCourseAccess = async (req, res) => {
                 message: "This access request can no longer be rejected",
             });
         }
-        const [course, student] = await Promise.all([
-            Course.findById(access.course).session(dbSession),
-            User.findById(access.student).session(dbSession),
-        ]);
-        if (!course || !student) {
-            return res.status(404).json({
-                message: "Recorded course rejection data is incomplete",
-            });
-        }
+        let course = null;
+        let student = null;
         await dbSession.withTransaction(async () => {
-            await unlockSkillCoins(student, access.skillCoinAmount, `SkillCoin unlocked after recorded course rejection: ${course.title}`, {
-                courseId: access.course,
+            const currentAccess = await RecordedCourseAccess.findById(accessId).session(dbSession);
+            if (!currentAccess) {
+                throw new Error("Access request not found");
+            }
+            if (currentAccess.tutor.toString() !== userId.toString()) {
+                throw new Error("Not authorized");
+            }
+            if (currentAccess.status !== "pending" ||
+                currentAccess.coinStatus !== "locked") {
+                throw new Error("This access request can no longer be rejected");
+            }
+            const [freshCourse, freshStudent] = await Promise.all([
+                Course.findById(currentAccess.course).session(dbSession),
+                User.findById(currentAccess.student).session(dbSession),
+            ]);
+            if (!freshCourse || !freshStudent) {
+                throw new Error("Recorded course rejection data is incomplete");
+            }
+            await unlockSkillCoins(freshStudent, currentAccess.skillCoinAmount, `SkillCoin unlocked after recorded course rejection: ${freshCourse.title}`, {
+                courseId: currentAccess.course,
                 extra: {
                     accessType: "recorded_course",
                 },
             }, dbSession, "recorded_course_unlock");
-            access.status = "rejected";
-            access.coinStatus = "released";
-            access.rejectedAt = new Date();
-            access.approvedAt = null;
-            access.unlockedAt = null;
-            await access.save({ session: dbSession });
+            currentAccess.status = "rejected";
+            currentAccess.coinStatus = "released";
+            currentAccess.rejectedAt = new Date();
+            currentAccess.approvedAt = null;
+            currentAccess.unlockedAt = null;
+            await currentAccess.save({ session: dbSession });
+            access = currentAccess;
+            course = freshCourse;
+            student = freshStudent;
         });
         emitWalletUpdate(student._id.toString(), buildWalletSummary(student));
         const notification = await logActivity({
@@ -1064,7 +1123,7 @@ export const approveTuitionEnrollment = async (req, res) => {
             return res.status(400).json({ message: "Invalid enrollment request ID" });
         }
         dbSession = await mongoose.startSession();
-        const enrollment = await TuitionEnrollment.findById(enrollmentId).session(dbSession);
+        let enrollment = await TuitionEnrollment.findById(enrollmentId).session(dbSession);
         if (!enrollment) {
             return res.status(404).json({ message: "Tuition request not found" });
         }
@@ -1076,37 +1135,53 @@ export const approveTuitionEnrollment = async (req, res) => {
                 message: "This tuition request can no longer be approved",
             });
         }
-        const [course, student, tutor] = await Promise.all([
-            Course.findById(enrollment.course).session(dbSession),
-            User.findById(enrollment.student).session(dbSession),
-            User.findById(enrollment.tutor).session(dbSession),
-        ]);
-        if (!course || !student || !tutor) {
-            return res.status(404).json({
-                message: "Tuition approval data is incomplete",
-            });
-        }
+        let course = null;
+        let student = null;
+        let tutor = null;
         await dbSession.withTransaction(async () => {
+            const currentEnrollment = await TuitionEnrollment.findById(enrollmentId).session(dbSession);
+            if (!currentEnrollment) {
+                throw new Error("Tuition request not found");
+            }
+            if (currentEnrollment.tutor.toString() !== userId.toString()) {
+                throw new Error("Not authorized");
+            }
+            if (currentEnrollment.status !== "pending" ||
+                currentEnrollment.coinStatus !== "locked") {
+                throw new Error("This tuition request can no longer be approved");
+            }
+            const [freshCourse, freshStudent, freshTutor] = await Promise.all([
+                Course.findById(currentEnrollment.course).session(dbSession),
+                User.findById(currentEnrollment.student).session(dbSession),
+                User.findById(currentEnrollment.tutor).session(dbSession),
+            ]);
+            if (!freshCourse || !freshStudent || !freshTutor) {
+                throw new Error("Tuition approval data is incomplete");
+            }
             await settleLockedSkillCoins({
-                student,
-                tutor,
-                amount: enrollment.skillCoinAmount,
-                courseId: enrollment.course,
-                description: `SkillCoin settled for tuition enrollment: ${course.title}`,
+                student: freshStudent,
+                tutor: freshTutor,
+                amount: currentEnrollment.skillCoinAmount,
+                courseId: currentEnrollment.course,
+                description: `SkillCoin settled for tuition enrollment: ${freshCourse.title}`,
                 dbSession: dbSession,
                 studentTransactionType: "tuition_spend",
                 tutorTransactionType: "tuition_earn",
             });
-            enrollment.status = "approved";
-            enrollment.coinStatus = "settled";
-            enrollment.approvedAt = new Date();
-            enrollment.rejectedAt = null;
-            await enrollment.save({ session: dbSession });
+            currentEnrollment.status = "approved";
+            currentEnrollment.coinStatus = "settled";
+            currentEnrollment.approvedAt = new Date();
+            currentEnrollment.rejectedAt = null;
+            await currentEnrollment.save({ session: dbSession });
             await ensureTuitionSessionsGenerated({
-                enrollment,
-                course,
+                enrollment: currentEnrollment,
+                course: freshCourse,
                 dbSession: dbSession,
             });
+            enrollment = currentEnrollment;
+            course = freshCourse;
+            student = freshStudent;
+            tutor = freshTutor;
         });
         emitWalletUpdate(student._id.toString(), buildWalletSummary(student));
         emitWalletUpdate(tutor._id.toString(), buildWalletSummary(tutor));
@@ -1150,7 +1225,7 @@ export const rejectTuitionEnrollment = async (req, res) => {
             return res.status(400).json({ message: "Invalid enrollment request ID" });
         }
         dbSession = await mongoose.startSession();
-        const enrollment = await TuitionEnrollment.findById(enrollmentId).session(dbSession);
+        let enrollment = await TuitionEnrollment.findById(enrollmentId).session(dbSession);
         if (!enrollment) {
             return res.status(404).json({ message: "Tuition request not found" });
         }
@@ -1162,28 +1237,42 @@ export const rejectTuitionEnrollment = async (req, res) => {
                 message: "This tuition request can no longer be rejected",
             });
         }
-        const [course, student] = await Promise.all([
-            Course.findById(enrollment.course).session(dbSession),
-            User.findById(enrollment.student).session(dbSession),
-        ]);
-        if (!course || !student) {
-            return res.status(404).json({
-                message: "Tuition rejection data is incomplete",
-            });
-        }
+        let course = null;
+        let student = null;
         await dbSession.withTransaction(async () => {
-            await unlockSkillCoins(student, enrollment.skillCoinAmount, `SkillCoin unlocked after tuition request was declined: ${course.title}`, {
-                courseId: enrollment.course,
+            const currentEnrollment = await TuitionEnrollment.findById(enrollmentId).session(dbSession);
+            if (!currentEnrollment) {
+                throw new Error("Tuition request not found");
+            }
+            if (currentEnrollment.tutor.toString() !== userId.toString()) {
+                throw new Error("Not authorized");
+            }
+            if (currentEnrollment.status !== "pending" ||
+                currentEnrollment.coinStatus !== "locked") {
+                throw new Error("This tuition request can no longer be rejected");
+            }
+            const [freshCourse, freshStudent] = await Promise.all([
+                Course.findById(currentEnrollment.course).session(dbSession),
+                User.findById(currentEnrollment.student).session(dbSession),
+            ]);
+            if (!freshCourse || !freshStudent) {
+                throw new Error("Tuition rejection data is incomplete");
+            }
+            await unlockSkillCoins(freshStudent, currentEnrollment.skillCoinAmount, `SkillCoin unlocked after tuition request was declined: ${freshCourse.title}`, {
+                courseId: currentEnrollment.course,
                 extra: {
                     enrollmentType: "tuition",
                 },
             }, dbSession, "tuition_unlock");
-            enrollment.status = "rejected";
-            enrollment.coinStatus = "released";
-            enrollment.rejectedAt = new Date();
-            enrollment.approvedAt = null;
-            enrollment.generatedUntil = null;
-            await enrollment.save({ session: dbSession });
+            currentEnrollment.status = "rejected";
+            currentEnrollment.coinStatus = "released";
+            currentEnrollment.rejectedAt = new Date();
+            currentEnrollment.approvedAt = null;
+            currentEnrollment.generatedUntil = null;
+            await currentEnrollment.save({ session: dbSession });
+            enrollment = currentEnrollment;
+            course = freshCourse;
+            student = freshStudent;
         });
         emitWalletUpdate(student._id.toString(), buildWalletSummary(student));
         const notification = await logActivity({
@@ -1226,7 +1315,7 @@ export const pauseTuitionEnrollment = async (req, res) => {
             return res.status(400).json({ message: "Invalid enrollment request ID" });
         }
         dbSession = await mongoose.startSession();
-        const enrollment = await TuitionEnrollment.findById(enrollmentId).session(dbSession);
+        let enrollment = await TuitionEnrollment.findById(enrollmentId).session(dbSession);
         if (!enrollment) {
             return res.status(404).json({ message: "Tuition enrollment not found" });
         }
@@ -1239,14 +1328,25 @@ export const pauseTuitionEnrollment = async (req, res) => {
             });
         }
         await dbSession.withTransaction(async () => {
-            enrollment.status = "paused";
-            enrollment.pausedAt = new Date();
-            await enrollment.save({ session: dbSession });
+            const currentEnrollment = await TuitionEnrollment.findById(enrollmentId).session(dbSession);
+            if (!currentEnrollment) {
+                throw new Error("Tuition enrollment not found");
+            }
+            if (currentEnrollment.tutor.toString() !== userId.toString()) {
+                throw new Error("Not authorized");
+            }
+            if (currentEnrollment.status !== "approved") {
+                throw new Error("Only active tuition enrollments can be paused");
+            }
+            currentEnrollment.status = "paused";
+            currentEnrollment.pausedAt = new Date();
+            await currentEnrollment.save({ session: dbSession });
             await cancelFutureTuitionSessions({
-                enrollmentId: enrollment._id,
+                enrollmentId: currentEnrollment._id,
                 fromDate: new Date(),
                 dbSession: dbSession,
             });
+            enrollment = currentEnrollment;
         });
         return res.json({
             success: true,
@@ -1276,7 +1376,7 @@ export const resumeTuitionEnrollment = async (req, res) => {
             return res.status(400).json({ message: "Invalid enrollment request ID" });
         }
         dbSession = await mongoose.startSession();
-        const enrollment = await TuitionEnrollment.findById(enrollmentId).session(dbSession);
+        let enrollment = await TuitionEnrollment.findById(enrollmentId).session(dbSession);
         if (!enrollment) {
             return res.status(404).json({ message: "Tuition enrollment not found" });
         }
@@ -1288,20 +1388,36 @@ export const resumeTuitionEnrollment = async (req, res) => {
                 message: "Only paused tuition enrollments can be resumed",
             });
         }
-        const course = await Course.findById(enrollment.course).session(dbSession);
+        let course = await Course.findById(enrollment.course).session(dbSession);
         if (!course) {
             return res.status(404).json({ message: "Course not found" });
         }
         await dbSession.withTransaction(async () => {
-            enrollment.status = "approved";
-            enrollment.pausedAt = null;
-            enrollment.generatedUntil = new Date(Date.now() - 60 * 1000);
-            await enrollment.save({ session: dbSession });
+            const currentEnrollment = await TuitionEnrollment.findById(enrollmentId).session(dbSession);
+            if (!currentEnrollment) {
+                throw new Error("Tuition enrollment not found");
+            }
+            if (currentEnrollment.tutor.toString() !== userId.toString()) {
+                throw new Error("Not authorized");
+            }
+            if (currentEnrollment.status !== "paused") {
+                throw new Error("Only paused tuition enrollments can be resumed");
+            }
+            const freshCourse = await Course.findById(currentEnrollment.course).session(dbSession);
+            if (!freshCourse) {
+                throw new Error("Course not found");
+            }
+            currentEnrollment.status = "approved";
+            currentEnrollment.pausedAt = null;
+            currentEnrollment.generatedUntil = new Date(Date.now() - 60 * 1000);
+            await currentEnrollment.save({ session: dbSession });
             await ensureTuitionSessionsGenerated({
-                enrollment,
-                course,
+                enrollment: currentEnrollment,
+                course: freshCourse,
                 dbSession: dbSession,
             });
+            enrollment = currentEnrollment;
+            course = freshCourse;
         });
         return res.json({
             success: true,
@@ -1331,7 +1447,7 @@ export const cancelTuitionEnrollment = async (req, res) => {
             return res.status(400).json({ message: "Invalid enrollment request ID" });
         }
         dbSession = await mongoose.startSession();
-        const enrollment = await TuitionEnrollment.findById(enrollmentId).session(dbSession);
+        let enrollment = await TuitionEnrollment.findById(enrollmentId).session(dbSession);
         if (!enrollment) {
             return res.status(404).json({ message: "Tuition enrollment not found" });
         }
@@ -1345,35 +1461,51 @@ export const cancelTuitionEnrollment = async (req, res) => {
                 message: "This tuition enrollment can no longer be cancelled",
             });
         }
-        const [course, student] = await Promise.all([
-            Course.findById(enrollment.course).session(dbSession),
-            User.findById(enrollment.student).session(dbSession),
-        ]);
-        if (!course || !student) {
-            return res.status(404).json({
-                message: "Tuition cancellation data is incomplete",
-            });
-        }
+        let course = null;
+        let student = null;
         await dbSession.withTransaction(async () => {
-            if (enrollment.status === "pending" && enrollment.coinStatus === "locked") {
-                await unlockSkillCoins(student, enrollment.skillCoinAmount, `SkillCoin unlocked after tuition request was cancelled: ${course.title}`, {
-                    courseId: enrollment.course,
+            const currentEnrollment = await TuitionEnrollment.findById(enrollmentId).session(dbSession);
+            if (!currentEnrollment) {
+                throw new Error("Tuition enrollment not found");
+            }
+            const currentIsTutor = currentEnrollment.tutor.toString() === userId.toString();
+            const currentIsStudent = currentEnrollment.student.toString() === userId.toString();
+            if (!currentIsTutor && !currentIsStudent) {
+                throw new Error("Not authorized");
+            }
+            if (!["pending", "approved", "paused"].includes(currentEnrollment.status)) {
+                throw new Error("This tuition enrollment can no longer be cancelled");
+            }
+            const [freshCourse, freshStudent] = await Promise.all([
+                Course.findById(currentEnrollment.course).session(dbSession),
+                User.findById(currentEnrollment.student).session(dbSession),
+            ]);
+            if (!freshCourse || !freshStudent) {
+                throw new Error("Tuition cancellation data is incomplete");
+            }
+            if (currentEnrollment.status === "pending" &&
+                currentEnrollment.coinStatus === "locked") {
+                await unlockSkillCoins(freshStudent, currentEnrollment.skillCoinAmount, `SkillCoin unlocked after tuition request was cancelled: ${freshCourse.title}`, {
+                    courseId: currentEnrollment.course,
                     extra: {
                         enrollmentType: "tuition",
                     },
                 }, dbSession, "tuition_unlock");
-                enrollment.coinStatus = "released";
+                currentEnrollment.coinStatus = "released";
             }
-            enrollment.status = "cancelled";
-            enrollment.cancelledAt = new Date();
-            enrollment.pausedAt = null;
-            enrollment.generatedUntil = null;
-            await enrollment.save({ session: dbSession });
+            currentEnrollment.status = "cancelled";
+            currentEnrollment.cancelledAt = new Date();
+            currentEnrollment.pausedAt = null;
+            currentEnrollment.generatedUntil = null;
+            await currentEnrollment.save({ session: dbSession });
             await cancelFutureTuitionSessions({
-                enrollmentId: enrollment._id,
+                enrollmentId: currentEnrollment._id,
                 fromDate: new Date(),
                 dbSession: dbSession,
             });
+            enrollment = currentEnrollment;
+            course = freshCourse;
+            student = freshStudent;
         });
         emitWalletUpdate(student._id.toString(), buildWalletSummary(student));
         return res.json({

@@ -9,6 +9,7 @@ import RecordedCourseAccess from "../models/RecordedCourseAccess.js";
 import Session from "../models/Session.js";
 import SupportConversation from "../models/SupportConversation.js";
 import SupportMessage from "../models/SupportMessage.js";
+import TuitionEnrollment from "../models/TuitionEnrollment.js";
 import User from "../models/User.js";
 import WithdrawalRequest from "../models/WithdrawalRequest.js";
 import WalletRechargeOrder from "../models/WalletRechargeOrder.js";
@@ -196,6 +197,67 @@ const deleteUserData = async (userId) => {
         await syncCourseReviewRefs(courseId);
     }
 };
+const getActiveFinancialDependencyCount = async (userId) => {
+    const ownedCourseIds = await Course.find({ tutor: userId }).distinct("_id");
+    const [sessions, recordedAccess, tuitionEnrollments, withdrawals] = await Promise.all([
+        Session.countDocuments({
+            $and: [
+                {
+                    $or: [
+                        { student: userId },
+                        { tutor: userId },
+                        { course: { $in: ownedCourseIds } },
+                    ],
+                },
+                {
+                    $or: [
+                        { coinStatus: "locked" },
+                        { status: { $in: ["pending", "accepted", "completed"] } },
+                    ],
+                },
+            ],
+        }),
+        RecordedCourseAccess.countDocuments({
+            $and: [
+                {
+                    $or: [
+                        { student: userId },
+                        { tutor: userId },
+                        { course: { $in: ownedCourseIds } },
+                    ],
+                },
+                {
+                    $or: [
+                        { coinStatus: "locked" },
+                        { status: { $in: ["pending", "approved"] } },
+                    ],
+                },
+            ],
+        }),
+        TuitionEnrollment.countDocuments({
+            $and: [
+                {
+                    $or: [
+                        { student: userId },
+                        { tutor: userId },
+                        { course: { $in: ownedCourseIds } },
+                    ],
+                },
+                {
+                    $or: [
+                        { coinStatus: "locked" },
+                        { status: { $in: ["pending", "approved", "paused"] } },
+                    ],
+                },
+            ],
+        }),
+        WithdrawalRequest.countDocuments({
+            user: userId,
+            status: { $in: ["pending", "processing"] },
+        }),
+    ]);
+    return sessions + recordedAccess + tuitionEnrollments + withdrawals;
+};
 export const getAdminOverview = async (_req, res) => {
     try {
         const [totalUsers, totalCourses, totalSessions, totalSupportThreads, totalReviews, totalWalletTransactions, totalTutors, pendingSupportThreads, pendingSessions, pendingWithdrawalRequests, pendingAdminSettlementSessions, recordedCourses, liveCourses, tuitionCourses, recentUsers, recentActivities,] = await Promise.all([
@@ -373,6 +435,12 @@ export const deleteAdminUser = async (req, res) => {
         if (!user) {
             return res.status(404).json({ message: "User not found" });
         }
+        const activeDependencies = await getActiveFinancialDependencyCount(user._id);
+        if (activeDependencies > 0) {
+            return res.status(400).json({
+                message: "This user has active wallet, session, course access, tuition, or withdrawal records. Resolve them before deleting the user.",
+            });
+        }
         await deleteUserData(user._id);
         await user.deleteOne();
         return res.json({ message: "User deleted successfully" });
@@ -442,11 +510,46 @@ export const deleteAdminCourse = async (req, res) => {
         if (!isValidObjectId(id)) {
             return res.status(400).json({ message: "Invalid course ID" });
         }
-        const course = await Course.findByIdAndDelete(id);
+        const course = await Course.findById(id);
         if (!course) {
             return res.status(404).json({ message: "Course not found" });
         }
-        await CourseReview.deleteMany({ course: course._id });
+        const [activeSessions, activeRecordedAccess, activeTuitionEnrollments] = await Promise.all([
+            Session.countDocuments({
+                course: course._id,
+                $or: [
+                    { coinStatus: "locked" },
+                    { coinStatus: "awaiting_admin_release" },
+                    { status: { $in: ["pending", "accepted", "completed"] } },
+                ],
+            }),
+            RecordedCourseAccess.countDocuments({
+                course: course._id,
+                $or: [
+                    { coinStatus: "locked" },
+                    { status: { $in: ["pending", "approved"] } },
+                ],
+            }),
+            TuitionEnrollment.countDocuments({
+                course: course._id,
+                $or: [
+                    { coinStatus: "locked" },
+                    { status: { $in: ["pending", "approved", "paused"] } },
+                ],
+            }),
+        ]);
+        if (activeSessions || activeRecordedAccess || activeTuitionEnrollments) {
+            return res.status(400).json({
+                message: "This course has active sessions, recorded unlocks, or tuition enrollments. Resolve them before deleting the course.",
+            });
+        }
+        await course.deleteOne();
+        await Promise.all([
+            CourseReview.deleteMany({ course: course._id }),
+            RecordedCourseAccess.deleteMany({ course: course._id }),
+            TuitionEnrollment.deleteMany({ course: course._id }),
+            Session.deleteMany({ course: course._id }),
+        ]);
         return res.json({ message: "Course deleted successfully" });
     }
     catch (error) {
@@ -672,6 +775,9 @@ export const updateAdminWithdrawalRequest = async (req, res) => {
             }
             if (request.status === "paid" || request.status === "rejected") {
                 throw new Error("This withdrawal request is already closed");
+            }
+            if (request.status === status) {
+                throw new Error(`This withdrawal request is already marked ${status}`);
             }
             const user = await User.findById(request.user).session(dbSession);
             if (!user) {

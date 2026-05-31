@@ -9,6 +9,8 @@ import CourseReview from "../models/CourseReview.js";
 import Session from "../models/Session.js";
 import Activity from "../models/Activity.js";
 import AdminGift from "../models/AdminGift.js";
+import RecordedCourseAccess from "../models/RecordedCourseAccess.js";
+import TuitionEnrollment from "../models/TuitionEnrollment.js";
 import WithdrawalRequest from "../models/WithdrawalRequest.js";
 import WalletRechargeOrder from "../models/WalletRechargeOrder.js";
 import { emitWalletUpdate } from "../config/socket.js";
@@ -1140,7 +1142,7 @@ export const claimAdminGift = async (req, res) => {
                     senderAdminId: gift.senderAdmin.toString(),
                     note: gift.note || "",
                 },
-            }, dbSession || undefined);
+            }, dbSession || undefined, "admin_credit");
             gift.status = "claimed";
             gift.claimedAt = new Date();
             await gift.save({ session: dbSession });
@@ -1179,6 +1181,67 @@ export const claimAdminGift = async (req, res) => {
         await dbSession?.endSession();
     }
 };
+const getActiveSelfDeletionDependencyCount = async (userId) => {
+    const ownedCourseIds = await Course.find({ tutor: userId }).distinct("_id");
+    const [sessions, recordedAccess, tuitionEnrollments, withdrawals] = await Promise.all([
+        Session.countDocuments({
+            $and: [
+                {
+                    $or: [
+                        { student: userId },
+                        { tutor: userId },
+                        { course: { $in: ownedCourseIds } },
+                    ],
+                },
+                {
+                    $or: [
+                        { coinStatus: "locked" },
+                        { status: { $in: ["pending", "accepted", "completed"] } },
+                    ],
+                },
+            ],
+        }),
+        RecordedCourseAccess.countDocuments({
+            $and: [
+                {
+                    $or: [
+                        { student: userId },
+                        { tutor: userId },
+                        { course: { $in: ownedCourseIds } },
+                    ],
+                },
+                {
+                    $or: [
+                        { coinStatus: "locked" },
+                        { status: { $in: ["pending", "approved"] } },
+                    ],
+                },
+            ],
+        }),
+        TuitionEnrollment.countDocuments({
+            $and: [
+                {
+                    $or: [
+                        { student: userId },
+                        { tutor: userId },
+                        { course: { $in: ownedCourseIds } },
+                    ],
+                },
+                {
+                    $or: [
+                        { coinStatus: "locked" },
+                        { status: { $in: ["pending", "approved", "paused"] } },
+                    ],
+                },
+            ],
+        }),
+        WithdrawalRequest.countDocuments({
+            user: userId,
+            status: { $in: ["pending", "processing"] },
+        }),
+    ]);
+    return sessions + recordedAccess + tuitionEnrollments + withdrawals;
+};
 export const deleteAccount = async (req, res) => {
     try {
         const userId = req.userId;
@@ -1194,6 +1257,12 @@ export const deleteAccount = async (req, res) => {
         const user = await User.findById(userId);
         if (!user) {
             return res.status(404).json({ message: "User not found" });
+        }
+        const activeDependencies = await getActiveSelfDeletionDependencyCount(user._id);
+        if (activeDependencies > 0) {
+            return res.status(400).json({
+                message: "Resolve active sessions, course access, tuition, wallet locks, or withdrawals before deleting your account.",
+            });
         }
         const isMatch = await bcrypt.compare(currentPassword, user.password);
         if (!isMatch) {

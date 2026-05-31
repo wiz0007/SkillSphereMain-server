@@ -2,7 +2,7 @@ import mongoose from "mongoose";
 import { type IUser } from "../models/User.js";
 type WalletTransactionInput = {
     userId: mongoose.Types.ObjectId | string;
-    type: "recharge" | "admin_credit" | "admin_debit" | "withdrawal_lock" | "withdrawal_release" | "withdrawal_spend" | "session_lock" | "session_unlock" | "session_spend" | "session_earn" | "tuition_lock" | "tuition_unlock" | "tuition_spend" | "tuition_earn" | "recorded_course_lock" | "recorded_course_unlock" | "recorded_course_spend" | "recorded_course_earn";
+    type: WalletTransactionType;
     amount: number;
     balanceAfter: number;
     lockedAfter: number;
@@ -12,6 +12,7 @@ type WalletTransactionInput = {
     metadata?: Record<string, unknown>;
     dbSession?: mongoose.ClientSession;
 };
+type WalletTransactionType = "recharge" | "admin_credit" | "admin_debit" | "withdrawal_lock" | "withdrawal_release" | "withdrawal_spend" | "session_lock" | "session_unlock" | "session_spend" | "session_earn" | "tuition_lock" | "tuition_unlock" | "tuition_spend" | "tuition_earn" | "recorded_course_lock" | "recorded_course_unlock" | "recorded_course_spend" | "recorded_course_earn";
 export declare const getAvailableSkillCoins: (user: Pick<IUser, "skillCoinBalance" | "lockedSkillCoins">) => number;
 export declare const buildWalletSummary: (user: Pick<IUser, "skillCoinBalance" | "lockedSkillCoins">) => {
     skillCoinBalance: number;
@@ -23,7 +24,7 @@ export declare const creditSkillCoins: (user: IUser, amount: number, description
     sessionId?: mongoose.Types.ObjectId | string;
     courseId?: mongoose.Types.ObjectId | string;
     extra?: Record<string, unknown>;
-}, dbSession?: mongoose.ClientSession) => Promise<{
+}, dbSession?: mongoose.ClientSession, transactionType?: "recharge" | "admin_credit" | "session_earn" | "tuition_earn" | "recorded_course_earn") => Promise<{
     skillCoinBalance: number;
     lockedSkillCoins: number;
     availableSkillCoins: number;
