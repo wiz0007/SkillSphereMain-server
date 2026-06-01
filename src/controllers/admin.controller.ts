@@ -312,6 +312,23 @@ const getActiveFinancialDependencyCount = async (
   return sessions + recordedAccess + tuitionEnrollments + withdrawals;
 };
 
+const sumTransactionAmounts = async (
+  match: Record<string, unknown>,
+  transformAmount?: (amount: number) => number
+) => {
+  const transactions = await WalletTransaction.find(match)
+    .select("amount metadata")
+    .lean();
+
+  return transactions.reduce((total, transaction: any) => {
+    if (transformAmount) {
+      return total + transformAmount(Number(transaction.amount || 0));
+    }
+
+    return total + Number(transaction.amount || 0);
+  }, 0);
+};
+
 export const getAdminOverview: RequestHandler = async (_req, res) => {
   try {
     const [
@@ -329,6 +346,14 @@ export const getAdminOverview: RequestHandler = async (_req, res) => {
       recordedCourses,
       liveCourses,
       tuitionCourses,
+      anchoredWalletTransactions,
+      pendingWalletTransactions,
+      failedWalletTransactions,
+      totalLockedSkillCoins,
+      rechargeVolume,
+      tutorPayouts,
+      withdrawalsPaid,
+      platformCommission,
       recentUsers,
       recentActivities,
     ] = await Promise.all([
@@ -352,6 +377,34 @@ export const getAdminOverview: RequestHandler = async (_req, res) => {
       Course.countDocuments({ type: "recorded" }),
       Course.countDocuments({ type: "live" }),
       Course.countDocuments({ type: "tuition" }),
+      WalletTransaction.countDocuments({ auditStatus: "anchored" }),
+      WalletTransaction.countDocuments({ auditStatus: "pending" }),
+      WalletTransaction.countDocuments({ auditStatus: "failed" }),
+      User.aggregate([
+        {
+          $group: {
+            _id: null,
+            total: { $sum: "$lockedSkillCoins" },
+          },
+        },
+      ]),
+      sumTransactionAmounts({ type: "recharge" }),
+      sumTransactionAmounts({
+        type: {
+          $in: ["session_earn", "tuition_earn", "recorded_course_earn"],
+        },
+      }),
+      sumTransactionAmounts({ type: "withdrawal_spend" }, Math.abs),
+      WalletTransaction.find({ type: "session_spend" })
+        .select("metadata")
+        .lean()
+        .then((transactions) =>
+          transactions.reduce(
+            (total, transaction: any) =>
+              total + Number(transaction.metadata?.commissionAmount || 0),
+            0
+          )
+        ),
       User.find()
         .select("username email isAdmin identityVerificationStatus tutorVerificationStatus verifiedBadgeLevel profileCompleted isVerified skillCoinBalance lockedSkillCoins createdAt")
         .sort({ createdAt: -1 })
@@ -383,6 +436,16 @@ export const getAdminOverview: RequestHandler = async (_req, res) => {
         pendingSupportThreads,
         totalReviews,
         totalWalletTransactions,
+        anchoredWalletTransactions,
+        pendingWalletTransactions,
+        failedWalletTransactions,
+      },
+      revenue: {
+        rechargeVolume,
+        tutorPayouts,
+        withdrawalsPaid,
+        platformCommission,
+        totalLockedSkillCoins: Number(totalLockedSkillCoins[0]?.total || 0),
       },
       recentUsers: recentUsers.map((user) => serializeUser(user, profileMap)),
       recentActivities,

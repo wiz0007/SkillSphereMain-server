@@ -260,9 +260,20 @@ const getActiveFinancialDependencyCount = async (userId) => {
     ]);
     return sessions + recordedAccess + tuitionEnrollments + withdrawals;
 };
+const sumTransactionAmounts = async (match, transformAmount) => {
+    const transactions = await WalletTransaction.find(match)
+        .select("amount metadata")
+        .lean();
+    return transactions.reduce((total, transaction) => {
+        if (transformAmount) {
+            return total + transformAmount(Number(transaction.amount || 0));
+        }
+        return total + Number(transaction.amount || 0);
+    }, 0);
+};
 export const getAdminOverview = async (_req, res) => {
     try {
-        const [totalUsers, totalCourses, totalSessions, totalSupportThreads, totalReviews, totalWalletTransactions, totalTutors, pendingSupportThreads, pendingSessions, pendingWithdrawalRequests, pendingAdminSettlementSessions, recordedCourses, liveCourses, tuitionCourses, recentUsers, recentActivities,] = await Promise.all([
+        const [totalUsers, totalCourses, totalSessions, totalSupportThreads, totalReviews, totalWalletTransactions, totalTutors, pendingSupportThreads, pendingSessions, pendingWithdrawalRequests, pendingAdminSettlementSessions, recordedCourses, liveCourses, tuitionCourses, anchoredWalletTransactions, pendingWalletTransactions, failedWalletTransactions, totalLockedSkillCoins, rechargeVolume, tutorPayouts, withdrawalsPaid, platformCommission, recentUsers, recentActivities,] = await Promise.all([
             User.countDocuments(),
             Course.countDocuments(),
             Session.countDocuments(),
@@ -283,6 +294,28 @@ export const getAdminOverview = async (_req, res) => {
             Course.countDocuments({ type: "recorded" }),
             Course.countDocuments({ type: "live" }),
             Course.countDocuments({ type: "tuition" }),
+            WalletTransaction.countDocuments({ auditStatus: "anchored" }),
+            WalletTransaction.countDocuments({ auditStatus: "pending" }),
+            WalletTransaction.countDocuments({ auditStatus: "failed" }),
+            User.aggregate([
+                {
+                    $group: {
+                        _id: null,
+                        total: { $sum: "$lockedSkillCoins" },
+                    },
+                },
+            ]),
+            sumTransactionAmounts({ type: "recharge" }),
+            sumTransactionAmounts({
+                type: {
+                    $in: ["session_earn", "tuition_earn", "recorded_course_earn"],
+                },
+            }),
+            sumTransactionAmounts({ type: "withdrawal_spend" }, Math.abs),
+            WalletTransaction.find({ type: "session_spend" })
+                .select("metadata")
+                .lean()
+                .then((transactions) => transactions.reduce((total, transaction) => total + Number(transaction.metadata?.commissionAmount || 0), 0)),
             User.find()
                 .select("username email isAdmin identityVerificationStatus tutorVerificationStatus verifiedBadgeLevel profileCompleted isVerified skillCoinBalance lockedSkillCoins createdAt")
                 .sort({ createdAt: -1 })
@@ -310,6 +343,16 @@ export const getAdminOverview = async (_req, res) => {
                 pendingSupportThreads,
                 totalReviews,
                 totalWalletTransactions,
+                anchoredWalletTransactions,
+                pendingWalletTransactions,
+                failedWalletTransactions,
+            },
+            revenue: {
+                rechargeVolume,
+                tutorPayouts,
+                withdrawalsPaid,
+                platformCommission,
+                totalLockedSkillCoins: Number(totalLockedSkillCoins[0]?.total || 0),
             },
             recentUsers: recentUsers.map((user) => serializeUser(user, profileMap)),
             recentActivities,
