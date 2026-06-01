@@ -253,6 +253,7 @@ const syncCourseRatings = async (courseId: mongoose.Types.ObjectId | string) => 
     {
       $match: {
         course: new mongoose.Types.ObjectId(courseId),
+        rating: { $gte: 1, $lte: 5 },
       },
     },
     {
@@ -275,6 +276,38 @@ const syncCourseRatings = async (courseId: mongoose.Types.ObjectId | string) => 
       ? Number(aggregates.averageRating.toFixed(1))
       : 0,
   });
+};
+
+const buildRatingBreakdown = async (
+  courseId: mongoose.Types.ObjectId | string
+) => {
+  const rows = await CourseReview.aggregate<{
+    _id: number;
+    count: number;
+  }>([
+    {
+      $match: {
+        course: new mongoose.Types.ObjectId(courseId),
+        rating: { $gte: 1, $lte: 5 },
+      },
+    },
+    {
+      $group: {
+        _id: "$rating",
+        count: { $sum: 1 },
+      },
+    },
+  ]);
+
+  const counts = rows.reduce<Record<number, number>>((acc, row) => {
+    acc[row._id] = row.count;
+    return acc;
+  }, {});
+
+  return [5, 4, 3, 2, 1].map((star) => ({
+    star,
+    count: counts[star] || 0,
+  }));
 };
 
 const syncCourseReviewRefs = async (
@@ -312,7 +345,6 @@ const buildCourseReviews = async (
   return reviews.map((review) => ({
     _id: review._id.toString(),
     user: review.user,
-    rating: review.rating,
     comment: review.comment,
     createdAt: review.createdAt,
     updatedAt: review.updatedAt,
@@ -685,11 +717,13 @@ export const getCourseById: RequestHandler = async (req, res) => {
       }),
     ]);
     const reviews = await buildCourseReviews(course.reviewRefs || []);
+    const ratingBreakdown = await buildRatingBreakdown(course._id);
 
     if (!viewerId) {
       return res.json({
         ...finalCourse,
         reviews,
+        ratingBreakdown,
         isSaved: false,
         recordedAccess:
           course.type === "recorded" ? buildEmptyRecordedAccessSummary() : null,
@@ -717,6 +751,7 @@ export const getCourseById: RequestHandler = async (req, res) => {
     return res.json({
       ...finalCourse,
       reviews,
+      ratingBreakdown,
       isSaved: savedBy.some((savedUserId) => savedUserId.toString() === viewerId),
       reviewEligibility: {
         canReview: hasEnrolled,
@@ -2060,10 +2095,12 @@ export const rateCourse: RequestHandler = async (req, res) => {
     const refreshedCourse = await Course.findById(course._id)
       .select("averageRating totalRatings")
       .lean();
+    const ratingBreakdown = await buildRatingBreakdown(course._id);
 
     return res.json({
       averageRating: refreshedCourse?.averageRating || 0,
       totalRatings: refreshedCourse?.totalRatings || 0,
+      ratingBreakdown,
     });
   } catch (err: any) {
     console.error("RATE ERROR:", err);
@@ -2077,7 +2114,7 @@ export const addReview: RequestHandler = async (req, res) => {
   try {
     const userId = req.userId;
     const id = getId(req.params.id);
-    const { rating, comment } = req.body;
+    const { comment } = req.body;
 
     if (!userId) {
       return res.status(401).json({ message: "Unauthorized" });
@@ -2113,7 +2150,6 @@ export const addReview: RequestHandler = async (req, res) => {
       },
       {
         $set: {
-          rating,
           comment: comment.trim(),
         },
         $setOnInsert: {
@@ -2138,11 +2174,13 @@ export const addReview: RequestHandler = async (req, res) => {
     const finalReviews = await buildCourseReviews(
       refreshedCourse?.reviewRefs || []
     );
+    const ratingBreakdown = await buildRatingBreakdown(course._id);
 
     return res.json({
       reviews: finalReviews,
       averageRating: refreshedCourse?.averageRating || 0,
       totalRatings: refreshedCourse?.totalRatings || 0,
+      ratingBreakdown,
     });
   } catch (err: any) {
     console.error("REVIEW ERROR:", err);

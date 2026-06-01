@@ -61,7 +61,6 @@ export const ratingSchema = z.object({
 });
 /* ================= REVIEW ================= */
 export const reviewSchema = z.object({
-    rating: z.number().min(1).max(5),
     comment: z.string().min(3).max(500),
 });
 //# sourceMappingURL=course.validator.js.map

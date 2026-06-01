@@ -1291,6 +1291,7 @@ export const deleteAccount = async (req, res) => {
                 {
                     $match: {
                         course: new mongoose.Types.ObjectId(courseId),
+                        rating: { $gte: 1, $lte: 5 },
                     },
                 },
                 {

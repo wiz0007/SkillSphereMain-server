@@ -183,6 +183,7 @@ const syncCourseRatings = async (courseId) => {
         {
             $match: {
                 course: new mongoose.Types.ObjectId(courseId),
+                rating: { $gte: 1, $lte: 5 },
             },
         },
         {
@@ -203,6 +204,30 @@ const syncCourseRatings = async (courseId) => {
             ? Number(aggregates.averageRating.toFixed(1))
             : 0,
     });
+};
+const buildRatingBreakdown = async (courseId) => {
+    const rows = await CourseReview.aggregate([
+        {
+            $match: {
+                course: new mongoose.Types.ObjectId(courseId),
+                rating: { $gte: 1, $lte: 5 },
+            },
+        },
+        {
+            $group: {
+                _id: "$rating",
+                count: { $sum: 1 },
+            },
+        },
+    ]);
+    const counts = rows.reduce((acc, row) => {
+        acc[row._id] = row.count;
+        return acc;
+    }, {});
+    return [5, 4, 3, 2, 1].map((star) => ({
+        star,
+        count: counts[star] || 0,
+    }));
 };
 const syncCourseReviewRefs = async (courseId) => {
     const reviewRefs = await CourseReview.find({
@@ -231,7 +256,6 @@ const buildCourseReviews = async (reviewRefs) => {
     return reviews.map((review) => ({
         _id: review._id.toString(),
         user: review.user,
-        rating: review.rating,
         comment: review.comment,
         createdAt: review.createdAt,
         updatedAt: review.updatedAt,
@@ -509,10 +533,12 @@ export const getCourseById = async (req, res) => {
             }),
         ]);
         const reviews = await buildCourseReviews(course.reviewRefs || []);
+        const ratingBreakdown = await buildRatingBreakdown(course._id);
         if (!viewerId) {
             return res.json({
                 ...finalCourse,
                 reviews,
+                ratingBreakdown,
                 isSaved: false,
                 recordedAccess: course.type === "recorded" ? buildEmptyRecordedAccessSummary() : null,
                 recordedRequests: [],
@@ -535,6 +561,7 @@ export const getCourseById = async (req, res) => {
         return res.json({
             ...finalCourse,
             reviews,
+            ratingBreakdown,
             isSaved: savedBy.some((savedUserId) => savedUserId.toString() === viewerId),
             reviewEligibility: {
                 canReview: hasEnrolled,
@@ -1551,9 +1578,11 @@ export const rateCourse = async (req, res) => {
         const refreshedCourse = await Course.findById(course._id)
             .select("averageRating totalRatings")
             .lean();
+        const ratingBreakdown = await buildRatingBreakdown(course._id);
         return res.json({
             averageRating: refreshedCourse?.averageRating || 0,
             totalRatings: refreshedCourse?.totalRatings || 0,
+            ratingBreakdown,
         });
     }
     catch (err) {
@@ -1567,7 +1596,7 @@ export const addReview = async (req, res) => {
     try {
         const userId = req.userId;
         const id = getId(req.params.id);
-        const { rating, comment } = req.body;
+        const { comment } = req.body;
         if (!userId) {
             return res.status(401).json({ message: "Unauthorized" });
         }
@@ -1593,7 +1622,6 @@ export const addReview = async (req, res) => {
             user: new mongoose.Types.ObjectId(userId),
         }, {
             $set: {
-                rating,
                 comment: comment.trim(),
             },
             $setOnInsert: {
@@ -1611,10 +1639,12 @@ export const addReview = async (req, res) => {
             .select("reviewRefs averageRating totalRatings")
             .lean();
         const finalReviews = await buildCourseReviews(refreshedCourse?.reviewRefs || []);
+        const ratingBreakdown = await buildRatingBreakdown(course._id);
         return res.json({
             reviews: finalReviews,
             averageRating: refreshedCourse?.averageRating || 0,
             totalRatings: refreshedCourse?.totalRatings || 0,
+            ratingBreakdown,
         });
     }
     catch (err) {

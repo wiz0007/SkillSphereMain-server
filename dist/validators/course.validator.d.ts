@@ -28,7 +28,6 @@ export declare const ratingSchema: z.ZodObject<{
     value: z.ZodNumber;
 }, z.core.$strip>;
 export declare const reviewSchema: z.ZodObject<{
-    rating: z.ZodNumber;
     comment: z.ZodString;
 }, z.core.$strip>;
 //# sourceMappingURL=course.validator.d.ts.map

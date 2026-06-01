@@ -2,7 +2,7 @@ import mongoose, { Document } from "mongoose";
 export interface ICourseReview extends Document {
     course: mongoose.Types.ObjectId;
     user: mongoose.Types.ObjectId;
-    rating: number;
+    rating?: number;
     comment: string;
     createdAt?: Date;
     updatedAt?: Date;

@@ -3,7 +3,7 @@ import mongoose, { Document, Schema } from "mongoose";
 export interface ICourseReview extends Document {
   course: mongoose.Types.ObjectId;
   user: mongoose.Types.ObjectId;
-  rating: number;
+  rating?: number;
   comment: string;
   createdAt?: Date;
   updatedAt?: Date;
@@ -25,7 +25,6 @@ const CourseReviewSchema = new Schema<ICourseReview>(
     },
     rating: {
       type: Number,
-      required: true,
       min: 1,
       max: 5,
     },

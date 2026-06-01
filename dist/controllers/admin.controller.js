@@ -119,6 +119,7 @@ const syncCourseRatings = async (courseId) => {
         {
             $match: {
                 course: new mongoose.Types.ObjectId(courseId),
+                rating: { $gte: 1, $lte: 5 },
             },
         },
         {
@@ -1092,7 +1093,7 @@ export const sendAdminSupportMessage = async (req, res) => {
 };
 export const getAdminReviews = async (_req, res) => {
     try {
-        const reviews = await CourseReview.find()
+        const reviews = await CourseReview.find({ comment: { $ne: "" } })
             .populate("course", "title type")
             .populate("user", "username email isAdmin identityVerificationStatus tutorVerificationStatus verifiedBadgeLevel")
             .sort({ createdAt: -1 })
@@ -1101,7 +1102,6 @@ export const getAdminReviews = async (_req, res) => {
         const profileMap = await getProfileMap(reviews.map((review) => review.user?._id?.toString?.() || ""));
         return res.json(reviews.map((review) => ({
             _id: review._id.toString(),
-            rating: review.rating,
             comment: review.comment,
             createdAt: review.createdAt,
             updatedAt: review.updatedAt,
@@ -1126,13 +1126,20 @@ export const deleteAdminReview = async (req, res) => {
         if (!isValidObjectId(id)) {
             return res.status(400).json({ message: "Invalid review ID" });
         }
-        const review = await CourseReview.findByIdAndDelete(id);
+        const review = await CourseReview.findById(id);
         if (!review) {
             return res.status(404).json({ message: "Review not found" });
         }
+        if (typeof review.rating === "number") {
+            review.comment = "";
+            await review.save();
+        }
+        else {
+            await review.deleteOne();
+        }
         await syncCourseRatings(review.course);
         await syncCourseReviewRefs(review.course);
-        return res.json({ message: "Review deleted successfully" });
+        return res.json({ message: "Written review removed successfully" });
     }
     catch (error) {
         console.error("ADMIN DELETE REVIEW ERROR:", error);
