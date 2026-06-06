@@ -14,9 +14,21 @@ export interface IVerificationRequest extends Document {
   status: VerificationRequestStatus;
   documentType?: string;
   documentFrontUrl?: string | null;
+  documentFrontPublicId?: string | null;
+  documentFrontResourceType?: string | null;
+  documentFrontDeliveryType?: string | null;
   documentBackUrl?: string | null;
+  documentBackPublicId?: string | null;
+  documentBackResourceType?: string | null;
+  documentBackDeliveryType?: string | null;
   selfieUrl?: string | null;
+  selfiePublicId?: string | null;
+  selfieResourceType?: string | null;
+  selfieDeliveryType?: string | null;
   supportingDocumentUrl?: string | null;
+  supportingDocumentPublicId?: string | null;
+  supportingDocumentResourceType?: string | null;
+  supportingDocumentDeliveryType?: string | null;
   supportingDocumentName?: string | null;
   supportingDocumentMimeType?: string | null;
   note?: string;
@@ -64,7 +76,37 @@ const VerificationRequestSchema = new Schema<IVerificationRequest>(
       default: null,
       trim: true,
     },
+    documentFrontPublicId: {
+      type: String,
+      default: null,
+      trim: true,
+    },
+    documentFrontResourceType: {
+      type: String,
+      default: null,
+      trim: true,
+    },
+    documentFrontDeliveryType: {
+      type: String,
+      default: null,
+      trim: true,
+    },
     documentBackUrl: {
+      type: String,
+      default: null,
+      trim: true,
+    },
+    documentBackPublicId: {
+      type: String,
+      default: null,
+      trim: true,
+    },
+    documentBackResourceType: {
+      type: String,
+      default: null,
+      trim: true,
+    },
+    documentBackDeliveryType: {
       type: String,
       default: null,
       trim: true,
@@ -74,7 +116,37 @@ const VerificationRequestSchema = new Schema<IVerificationRequest>(
       default: null,
       trim: true,
     },
+    selfiePublicId: {
+      type: String,
+      default: null,
+      trim: true,
+    },
+    selfieResourceType: {
+      type: String,
+      default: null,
+      trim: true,
+    },
+    selfieDeliveryType: {
+      type: String,
+      default: null,
+      trim: true,
+    },
     supportingDocumentUrl: {
+      type: String,
+      default: null,
+      trim: true,
+    },
+    supportingDocumentPublicId: {
+      type: String,
+      default: null,
+      trim: true,
+    },
+    supportingDocumentResourceType: {
+      type: String,
+      default: null,
+      trim: true,
+    },
+    supportingDocumentDeliveryType: {
       type: String,
       default: null,
       trim: true,

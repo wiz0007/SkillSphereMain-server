@@ -100,8 +100,11 @@ const serializeSupportMessage = (
   senderRole: message.senderRole,
   sender: serializeUser(message.sender, profileMap),
   attachment: message.attachmentUrl
+    || message.attachmentPublicId
     ? {
-        url: message.attachmentUrl,
+        url: message.attachmentPublicId
+          ? `/api/files/support/${message._id.toString()}/attachment`
+          : message.attachmentUrl,
         name: message.attachmentName || "Attachment",
         mimeType: message.attachmentMimeType || "",
       }
@@ -135,10 +138,14 @@ const uploadSupportAttachment = async (file?: Express.Multer.File) => {
   const result = await uploadMulterFile(file, {
     resource_type: "auto",
     folder: "skillsphere/support",
+    type: "authenticated",
   });
 
   return {
     url: result.secure_url,
+    publicId: result.public_id,
+    resourceType: result.resource_type,
+    deliveryType: result.type,
     name: file.originalname,
     mimeType: file.mimetype,
   };
@@ -1286,6 +1293,9 @@ export const sendAdminSupportMessage: RequestHandler = async (req, res) => {
       senderRole: "support",
       text,
       attachmentUrl: attachment?.url || null,
+      attachmentPublicId: attachment?.publicId || null,
+      attachmentResourceType: attachment?.resourceType || null,
+      attachmentDeliveryType: attachment?.deliveryType || null,
       attachmentName: attachment?.name || null,
       attachmentMimeType: attachment?.mimeType || null,
     });
