@@ -43,6 +43,9 @@ const releaseExpiredPendingSessionLocks = async () => {
     try {
       let studentId = "";
       let wallet: ReturnType<typeof buildWalletSummary> | null = null;
+      let releasedSessionId = "";
+      let releasedSessionTitle = "";
+      let releasedSkillCoinAmount = 0;
 
       await dbSession.withTransaction(async () => {
         const lockedSession = await Session.findOne({
@@ -79,10 +82,29 @@ const releaseExpiredPendingSessionLocks = async () => {
         lockedSession.coinStatus = "released";
         await lockedSession.save({ session: dbSession });
         studentId = student._id.toString();
+        releasedSessionId = lockedSession._id.toString();
+        releasedSessionTitle = lockedSession.title;
+        releasedSkillCoinAmount = lockedSession.skillCoinAmount;
       });
 
       if (studentId && wallet) {
         emitWalletUpdate(studentId, wallet);
+
+        const notification = await logActivity({
+          user: studentId,
+          type: "SESSION",
+          action: "LOCK_RELEASED",
+          entityId: releasedSessionId,
+          message: `Your pending session request for "${releasedSessionTitle}" expired, and ${releasedSkillCoinAmount} locked SkillCoin has been released back to your wallet.`,
+          metadata: {
+            releasedSkillCoin: releasedSkillCoinAmount,
+            reason: "expired_pending_session",
+          },
+        });
+
+        if (notification) {
+          emitNotification(studentId, notification);
+        }
       }
     } catch (error) {
       console.error("EXPIRED SESSION RELEASE ERROR:", error);
@@ -368,6 +390,8 @@ export const updateSessionStatus: RequestHandler = async (req, res) => {
       return res.status(404).json({ message: "Student not found" });
     }
 
+    let releasedSkillCoinAmount = 0;
+
     await dbSession.withTransaction(async () => {
       const currentSession = await Session.findById(id).session(dbSession!);
 
@@ -408,6 +432,7 @@ export const updateSessionStatus: RequestHandler = async (req, res) => {
         );
 
         currentSession.coinStatus = "released";
+        releasedSkillCoinAmount = currentSession.skillCoinAmount;
       }
 
       await currentSession.save({ session: dbSession! });
@@ -424,12 +449,24 @@ export const updateSessionStatus: RequestHandler = async (req, res) => {
       completed: "Session marked complete. Student confirmation is pending ✅",
     };
 
+    const notificationMessage =
+      status === "cancelled" && releasedSkillCoinAmount > 0
+        ? `Session rejected. ${releasedSkillCoinAmount} locked SkillCoin has been released back to your wallet.`
+        : msgMap[status];
+
     const notification = await logActivity({
       user: session.student.toString(),
       type: "SESSION",
       action: status.toUpperCase(),
       entityId: session._id.toString(),
-      message: msgMap[status],
+      message: notificationMessage,
+      metadata:
+        status === "cancelled" && releasedSkillCoinAmount > 0
+          ? {
+              releasedSkillCoin: releasedSkillCoinAmount,
+              reason: "session_cancelled",
+            }
+          : {},
     });
 
     emitNotification(session.student.toString(), notification);

@@ -6,6 +6,9 @@ export interface ISupportMessage extends Document {
     senderRole: SupportSenderRole;
     text: string;
     attachmentUrl?: string | null;
+    attachmentPublicId?: string | null;
+    attachmentResourceType?: string | null;
+    attachmentDeliveryType?: string | null;
     attachmentName?: string | null;
     attachmentMimeType?: string | null;
     readAt?: Date | null;

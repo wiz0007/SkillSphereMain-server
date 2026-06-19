@@ -19,6 +19,7 @@ import { configureCloudinary } from "./config/cloudinary.js";
 import { errorHandler } from "./middlewares/errorHandler.js";
 import { globalLimiter } from "./middlewares/rateLimiter.js";
 import { csrfProtection } from "./middlewares/csrfProtection.js";
+import { replayProtection } from "./middlewares/replayProtection.js";
 /* ================= ENV ================= */
 dotenv.config({
     path: path.resolve(process.cwd(), ".env"),
@@ -35,7 +36,7 @@ app.use(cors({
     origin: [
         "http://localhost:5173",
         "https://skill-sphere-main-client-oh1p.vercel.app",
-        "https://skillsphere.space"
+        "https://skillsphere.space",
     ],
     credentials: true,
 }));
@@ -43,8 +44,23 @@ app.use(cors({
 app.use(globalLimiter);
 /* 📦 BODY LIMIT (DoS protection) */
 app.use(express.json({ limit: "10kb" }));
-/* CSRF guard for cookie-authenticated mutation requests */
+/* 🛡️ CSRF protection */
 app.use(csrfProtection);
+/* 🛡️ Replay attack protection */
+app.use((req, res, next) => {
+    const unsafeMethods = ["POST", "PUT", "PATCH", "DELETE"];
+    // Exclude routes that should not require replay headers
+    const excludedPaths = [
+        "/api/auth/csrf",
+    ];
+    if (excludedPaths.includes(req.path)) {
+        return next();
+    }
+    if (unsafeMethods.includes(req.method)) {
+        return replayProtection(req, res, next);
+    }
+    next();
+});
 /* ================= ROUTES ================= */
 app.use("/api/auth", authRoutes);
 app.use("/api/profile", profileRoutes);

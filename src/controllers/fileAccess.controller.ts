@@ -168,8 +168,8 @@ export const openSupportAttachment: RequestHandler = async (req, res) => {
       return res.redirect(
         buildSignedCloudinaryUrl({
           publicId: message.attachmentPublicId,
-          resourceType: message.attachmentResourceType,
-          deliveryType: message.attachmentDeliveryType,
+          resourceType: message.attachmentResourceType || null,
+          deliveryType: message.attachmentDeliveryType || null,
         })
       );
     }

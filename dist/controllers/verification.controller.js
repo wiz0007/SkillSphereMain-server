@@ -58,9 +58,13 @@ const uploadVerificationAsset = async (file) => {
     const result = await uploadMulterFile(file, {
         resource_type: "auto",
         folder: "skillsphere/verifications",
+        type: "authenticated",
     });
     return {
         url: result.secure_url,
+        publicId: result.public_id,
+        resourceType: result.resource_type,
+        deliveryType: result.type,
         name: file.originalname,
         mimeType: file.mimetype,
     };
@@ -110,10 +114,18 @@ const serializeVerification = (request, profileMap) => ({
         ? serializeUser(request.revokedBy, profileMap)
         : null,
     assets: {
-        documentFrontUrl: request.documentFrontUrl || null,
-        documentBackUrl: request.documentBackUrl || null,
-        selfieUrl: request.selfieUrl || null,
-        supportingDocumentUrl: request.supportingDocumentUrl || null,
+        documentFrontUrl: request.documentFrontPublicId
+            ? `/api/files/verification/${request._id.toString()}/document-front`
+            : request.documentFrontUrl || null,
+        documentBackUrl: request.documentBackPublicId
+            ? `/api/files/verification/${request._id.toString()}/document-back`
+            : request.documentBackUrl || null,
+        selfieUrl: request.selfiePublicId
+            ? `/api/files/verification/${request._id.toString()}/selfie`
+            : request.selfieUrl || null,
+        supportingDocumentUrl: request.supportingDocumentPublicId
+            ? `/api/files/verification/${request._id.toString()}/supporting-document`
+            : request.supportingDocumentUrl || null,
         supportingDocumentName: request.supportingDocumentName || null,
         supportingDocumentMimeType: request.supportingDocumentMimeType || null,
     },
@@ -198,8 +210,17 @@ export const submitIdentityVerification = async (req, res) => {
             status: "pending",
             documentType,
             documentFrontUrl: frontAsset?.url || null,
+            documentFrontPublicId: frontAsset?.publicId || null,
+            documentFrontResourceType: frontAsset?.resourceType || null,
+            documentFrontDeliveryType: frontAsset?.deliveryType || null,
             documentBackUrl: backAsset?.url || null,
+            documentBackPublicId: backAsset?.publicId || null,
+            documentBackResourceType: backAsset?.resourceType || null,
+            documentBackDeliveryType: backAsset?.deliveryType || null,
             selfieUrl: selfieAsset?.url || null,
+            selfiePublicId: selfieAsset?.publicId || null,
+            selfieResourceType: selfieAsset?.resourceType || null,
+            selfieDeliveryType: selfieAsset?.deliveryType || null,
             note,
         });
         await User.findByIdAndUpdate(userId, {
@@ -280,6 +301,9 @@ export const submitTutorVerification = async (req, res) => {
             provider: "manual",
             status: "pending",
             supportingDocumentUrl: supportingAsset?.url || null,
+            supportingDocumentPublicId: supportingAsset?.publicId || null,
+            supportingDocumentResourceType: supportingAsset?.resourceType || null,
+            supportingDocumentDeliveryType: supportingAsset?.deliveryType || null,
             supportingDocumentName: supportingAsset?.name || null,
             supportingDocumentMimeType: supportingAsset?.mimeType || null,
             note,

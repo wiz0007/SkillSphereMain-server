@@ -27,6 +27,23 @@ const SupportMessageSchema = new Schema({
         default: null,
         trim: true,
     },
+    attachmentPublicId: {
+        type: String,
+        default: null,
+        trim: true,
+    },
+    attachmentResourceType: {
+        type: String,
+        default: null,
+        trim: true,
+        maxlength: 40,
+    },
+    attachmentDeliveryType: {
+        type: String,
+        default: null,
+        trim: true,
+        maxlength: 40,
+    },
     attachmentName: {
         type: String,
         default: null,

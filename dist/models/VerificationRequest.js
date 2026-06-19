@@ -34,7 +34,37 @@ const VerificationRequestSchema = new Schema({
         default: null,
         trim: true,
     },
+    documentFrontPublicId: {
+        type: String,
+        default: null,
+        trim: true,
+    },
+    documentFrontResourceType: {
+        type: String,
+        default: null,
+        trim: true,
+    },
+    documentFrontDeliveryType: {
+        type: String,
+        default: null,
+        trim: true,
+    },
     documentBackUrl: {
+        type: String,
+        default: null,
+        trim: true,
+    },
+    documentBackPublicId: {
+        type: String,
+        default: null,
+        trim: true,
+    },
+    documentBackResourceType: {
+        type: String,
+        default: null,
+        trim: true,
+    },
+    documentBackDeliveryType: {
         type: String,
         default: null,
         trim: true,
@@ -44,7 +74,37 @@ const VerificationRequestSchema = new Schema({
         default: null,
         trim: true,
     },
+    selfiePublicId: {
+        type: String,
+        default: null,
+        trim: true,
+    },
+    selfieResourceType: {
+        type: String,
+        default: null,
+        trim: true,
+    },
+    selfieDeliveryType: {
+        type: String,
+        default: null,
+        trim: true,
+    },
     supportingDocumentUrl: {
+        type: String,
+        default: null,
+        trim: true,
+    },
+    supportingDocumentPublicId: {
+        type: String,
+        default: null,
+        trim: true,
+    },
+    supportingDocumentResourceType: {
+        type: String,
+        default: null,
+        trim: true,
+    },
+    supportingDocumentDeliveryType: {
         type: String,
         default: null,
         trim: true,
