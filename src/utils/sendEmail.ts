@@ -1,10 +1,23 @@
-import { Resend } from "resend";
+﻿import { Resend } from "resend";
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+let resendClient: Resend | null = null;
+
+const getResendClient = () => {
+  const apiKey = process.env.RESEND_API_KEY?.trim();
+
+  if (!apiKey) {
+    throw new Error(
+      "Email service is not configured. Add RESEND_API_KEY to server/.env."
+    );
+  }
+
+  resendClient ??= new Resend(apiKey);
+  return resendClient;
+};
 
 export const sendOTPEmail = async (to: string, otp: string) => {
   try {
-    const response = await resend.emails.send({
+    const response = await getResendClient().emails.send({
       from: "noreply@skillsphere.space", // change after domain verify
       to,
       subject: "Your OTP Code",
@@ -27,7 +40,7 @@ export const sendOTPEmail = async (to: string, otp: string) => {
 
 export const sendPasswordResetEmail = async (to: string, resetLink: string) => {
   try {
-    const response = await resend.emails.send({
+    const response = await getResendClient().emails.send({
       from: "noreply@skillsphere.space",
       to,
       subject: "Reset your SkillSphere password",
@@ -49,10 +62,10 @@ export const sendPasswordResetEmail = async (to: string, resetLink: string) => {
             </a>
           </div>
           <p style="line-height: 1.6; color: #64748b; font-size: 14px;">
-            If you didn’t request this, you can ignore this email and your password will stay unchanged.
+            If you didnâ€™t request this, you can ignore this email and your password will stay unchanged.
           </p>
           <p style="line-height: 1.6; color: #64748b; font-size: 14px; word-break: break-all;">
-            If the button doesn’t work, open this link manually:<br />
+            If the button doesnâ€™t work, open this link manually:<br />
             <a href="${resetLink}" style="color: #0f766e;">${resetLink}</a>
           </p>
         </div>
@@ -88,7 +101,7 @@ export const sendTransactionalEmail = async ({
   accent?: string;
 }) => {
   try {
-    const response = await resend.emails.send({
+    const response = await getResendClient().emails.send({
       from: "noreply@skillsphere.space",
       to,
       subject,
@@ -124,3 +137,4 @@ export const sendTransactionalEmail = async ({
     throw error;
   }
 };
+

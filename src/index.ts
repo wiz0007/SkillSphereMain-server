@@ -1,5 +1,4 @@
-import dotenv from "dotenv";
-import path from "path";
+import "dotenv/config";
 import cors from "cors";
 import express from "express";
 import http from "http";
@@ -27,9 +26,6 @@ import { replayProtection } from "./middlewares/replayProtection.js";
 
 /* ================= ENV ================= */
 
-dotenv.config({
-  path: path.resolve(process.cwd(), ".env"),
-});
 
 /* ================= INIT ================= */
 
